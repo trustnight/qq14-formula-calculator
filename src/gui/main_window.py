@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QScrollArea, QFrame, QDialogButtonBox, QCheckBox,
     QListView
 )
-from PySide6.QtCore import Qt, QThread, Signal, QTimer, QRect, QPoint, QEvent
+from PySide6.QtCore import Qt, QThread, Signal, QTimer, QRect, QPoint, QEvent, QSize
 from PySide6.QtGui import QFont, QIcon, QPixmap, QColor
 from loguru import logger
 
@@ -178,6 +178,9 @@ class CreateMissingItemDialog(QDialog):
             'name': req_name,
             'quantity': req_quantity
         })
+        icon_path = os.path.join("icon", f"{req_name}.png")
+        if os.path.exists(icon_path):
+            list_item.setIcon(QIcon(icon_path))
         self.requirements_list.addItem(list_item)
     
     def remove_requirement(self):
@@ -452,6 +455,9 @@ class RecipeAddDialog(QDialog):
                             'name': req_item['name'],
                             'quantity': req['quantity']
                         })
+                        icon_path = os.path.join("icon", f"{req_item['name']}.png")
+                        if os.path.exists(icon_path):
+                            list_item.setIcon(QIcon(icon_path))
                         self.requirements_list.addItem(list_item)
                         logger.debug(f"[RecipeAddDialog.load_existing_data] requirements_list add: {item_text}")
                     except Exception as e:
@@ -588,7 +594,10 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
     
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("FFXIV 配方计算器")
+        try:
+            self.setTitle("FFXIV 配方计算器")
+        except AttributeError:
+            self.setWindowTitle("FFXIV 配方计算器")
         self.setGeometry(100, 100, 1200, 800)
         
         if FLUENT_AVAILABLE:
@@ -693,18 +702,12 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         type_layout.addWidget(self.type_combo)
         layout.addLayout(type_layout)
         # 物品表格
-        if FLUENT_AVAILABLE:
-            self.item_table = TableWidget()
-        else:
-            self.item_table = QTableWidget()
-        self.item_table.setColumnCount(3)
-        self.item_table.setHorizontalHeaderLabels(["名称", "产出数量", "操作"])
-        self.item_table.setColumnWidth(0, 180)
-        self.item_table.setColumnWidth(1, 80)
-        self.item_table.setColumnWidth(2, 100)
-        self.item_table.horizontalHeader().setStretchLastSection(False)
-        self.item_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.item_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.item_table = QListWidget()
+        self.item_table.setViewMode(QListView.IconMode)
+        self.item_table.setIconSize(QSize(48, 48))
+        self.item_table.setGridSize(QSize(120, 80))
+        self.item_table.setResizeMode(QListView.Adjust)
+        self.item_table.setSpacing(10)
         self.item_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.item_table.itemDoubleClicked.connect(self.on_item_double_clicked)
         layout.addWidget(self.item_table)
@@ -749,16 +752,21 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         # 设置列宽比例为5:2:3
         table = self.selected_table
         total = table.viewport().width()
-        table.setColumnWidth(0, int(total * 0.5))  # 名称
-        table.setColumnWidth(1, int(total * 0.2))  # 类型
-        table.setColumnWidth(2, int(total * 0.3))  # 数量
+        table.setColumnWidth(0, 180)  # 名称
+        table.setColumnWidth(1, 80)  # 类型
+        table.setColumnWidth(2, 64)  # 数量
+        # 数量列内容居中
+        for row in range(table.rowCount()):
+            item = table.item(row, 2)
+            if item:
+                item.setTextAlignment(Qt.AlignCenter)
 
     def add_selected_item(self):
-        # 支持批量添加所有选中行
-        selected_rows = set(idx.row() for idx in self.item_table.selectedIndexes())
-        for row in selected_rows:
-            name = self.item_table.item(row, 0).text()
-            quantity = int(self.item_table.item(row, 1).text()) if self.item_table.item(row, 1) else 1
+        # 支持批量添加所有选中项
+        selected_items = self.item_table.selectedItems()
+        for item in selected_items:
+            name = item.text()
+            quantity = 1  # 宫格模式下没有数量列，默认1或可扩展
             type_text = self.type_combo.currentText()
             # 检查是否已存在
             already = False
@@ -774,20 +782,88 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
             else:
                 db_item = self.db_manager.get_material_by_name(name)
             item_id = db_item['id'] if db_item and 'id' in db_item else None
+            output_quantity = db_item['output_quantity'] if db_item and 'output_quantity' in db_item else 1
             row_pos = self.selected_table.rowCount()
-            item_widget = QTableWidgetItem(name)
-            item_widget.setData(Qt.UserRole, item_id)
+            # 名称列加图标，禁止编辑
+            icon_item = get_item_icon_item(name, icon_size=48)
+            icon_item.setData(Qt.UserRole, item_id)
+            icon_item.setFlags(icon_item.flags() & ~Qt.ItemIsEditable)
             self.selected_table.insertRow(row_pos)
-            self.selected_table.setItem(row_pos, 0, item_widget)
-            self.selected_table.setItem(row_pos, 1, QTableWidgetItem(type_text))
+            self.selected_table.setItem(row_pos, 0, icon_item)
+            # 类型列禁止编辑
+            type_item = QTableWidgetItem(type_text)
+            type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
+            self.selected_table.setItem(row_pos, 1, type_item)
             spin = QSpinBox()
-            spin.setMinimum(1)
+            spin.setMinimum(output_quantity)
             spin.setMaximum(9999)
-            spin.setValue(quantity)
+            spin.setSingleStep(output_quantity)
+            spin.setValue(output_quantity)
+            spin.setMinimumWidth(60)
             spin.setAlignment(Qt.AlignCenter)
-            spin.setStyleSheet("QSpinBox { margin: 0; padding: 0; }")
+            spin.setStyleSheet("""
+            QSpinBox {
+                padding-left: 6px; padding-right: 24px;
+            }
+            """)
             spin.valueChanged.connect(lambda value, idx=row_pos: self.update_item_quantity(idx, value))
             self.selected_table.setCellWidget(row_pos, 2, spin)
+        self.selected_table.verticalHeader().setDefaultSectionSize(28)
+        self.set_selected_table_column_widths()
+
+    def on_item_double_clicked(self, item):
+        # 只处理当前双击的item
+        name = item.text()
+        # 复用add_selected_item的核心逻辑，但只加一个
+        type_text = self.type_combo.currentText()
+        already = False
+        for i in range(self.selected_table.rowCount()):
+            if self.selected_table.item(i, 0) and self.selected_table.item(i, 0).text() == name:
+                already = True
+                break
+        if already:
+            return
+        if type_text == "成品":
+            db_item = self.db_manager.get_product_by_name(name)
+        else:
+            db_item = self.db_manager.get_material_by_name(name)
+        item_id = db_item['id'] if db_item and 'id' in db_item else None
+        output_quantity = db_item['output_quantity'] if db_item and 'output_quantity' in db_item else 1
+        row_pos = self.selected_table.rowCount()
+        # 名称列加图标，禁止编辑
+        icon_item = get_item_icon_item(name, icon_size=48)
+        icon_item.setData(Qt.UserRole, item_id)
+        icon_item.setFlags(icon_item.flags() & ~Qt.ItemIsEditable)
+        self.selected_table.insertRow(row_pos)
+        self.selected_table.setItem(row_pos, 0, icon_item)
+        # 类型列禁止编辑
+        type_item = QTableWidgetItem(type_text)
+        type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
+        self.selected_table.setItem(row_pos, 1, type_item)
+        spin = QSpinBox()
+        spin.setMinimum(output_quantity)
+        spin.setMaximum(9999)
+        spin.setSingleStep(output_quantity)
+        spin.setValue(output_quantity)
+        spin.setMinimumWidth(60)
+        spin.setAlignment(Qt.AlignCenter)
+        spin.setStyleSheet("""
+        QSpinBox {
+            padding-left: 6px; padding-right: 24px;
+        }
+        QSpinBox::up-button, QSpinBox::down-button {
+            width: 22px;
+            border: 1px solid #888888;
+        }
+        QSpinBox::up-button {
+            border-bottom: 1px solid #888888;
+        }
+        QSpinBox::down-button {
+            border-top: none;
+        }
+        """)
+        spin.valueChanged.connect(lambda value, idx=row_pos: self.update_item_quantity(idx, value))
+        self.selected_table.setCellWidget(row_pos, 2, spin)
         self.selected_table.verticalHeader().setDefaultSectionSize(28)
         self.set_selected_table_column_widths()
 
@@ -799,9 +875,27 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.set_selected_table_column_widths()
 
     def resizeEvent(self, event):
-        super().resizeEvent(event)
+        # 1. 锁定16:9比例
+        w = self.width()
+        h = self.height()
+        target_h = int(w * 9 / 16)
+        if abs(h - target_h) > 2:
+            self.resize(w, target_h)
+        # 2. 动态调整表格行高和图标大小
+        icon_size = max(24, min(96, int(self.item_table.rowHeight(0)))) if self.item_table.rowCount() > 0 else 48
+        # item_table
+        self.item_table.verticalHeader().setDefaultSectionSize(icon_size)
+        # selected_table
         if hasattr(self, 'selected_table'):
-            self.set_selected_table_column_widths()
+            self.selected_table.verticalHeader().setDefaultSectionSize(icon_size)
+        # result_table
+        if hasattr(self, 'result_table'):
+            self.result_table.verticalHeader().setDefaultSectionSize(icon_size)
+        # recipe_list_table
+        if hasattr(self, 'recipe_list_table'):
+            self.recipe_list_table.verticalHeader().setDefaultSectionSize(icon_size)
+        # 其它表格可按需添加
+        super().resizeEvent(event)
 
     def create_calculation_result_widget(self):
         """创建计算结果显示组件"""
@@ -841,7 +935,7 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.recipe_tree.setHeaderLabels(["物品名称", "数量", "类型"])
         self.recipe_tree.setColumnWidth(0, 200)
         self.recipe_tree.setColumnWidth(1, 80)
-        self.recipe_tree.setColumnWidth(2, 100)
+        self.recipe_tree.setColumnWidth(2, 80)
         layout.addWidget(self.recipe_tree)
         
         return widget
@@ -1055,7 +1149,7 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.recipe_detail_tree.setHeaderLabels(["物品名称", "数量", "类型"])
         self.recipe_detail_tree.setColumnWidth(0, 200)
         self.recipe_detail_tree.setColumnWidth(1, 80)
-        self.recipe_detail_tree.setColumnWidth(2, 100)
+        self.recipe_detail_tree.setColumnWidth(2, 80)
         layout.addWidget(self.recipe_detail_tree)
         
         return widget
@@ -1104,12 +1198,18 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
             items = [item for item in items if search_text.lower() in item['name'].lower()]
         
         # 更新表格
-        self.item_table.setRowCount(len(items))
-        for i, item in enumerate(items):
-            self.item_table.setItem(i, 0, QTableWidgetItem(item['name']))
-            self.item_table.setItem(i, 1, QTableWidgetItem(self.format_number(item.get('output_quantity', 1))))
-        
-        self.item_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.item_table.clear()
+        icon_size = 48
+        for item in items:
+            icon_item = QListWidgetItem()
+            icon_item.setText(item['name'])
+            icon_path = os.path.join("icon", f"{item['name']}.png")
+            if os.path.exists(icon_path):
+                pixmap = QPixmap(icon_path)
+                if not pixmap.isNull():
+                    pixmap = pixmap.scaled(icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    icon_item.setIcon(QIcon(pixmap))
+            self.item_table.addItem(icon_item)
     
     def refresh_recipe_list(self):
         """刷新配方列表，顺序为成品、半成品、原材料，且只显示数据库真实存在的数据"""
@@ -1176,17 +1276,19 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
                         logger.warning(f"[refresh_recipe_list] base id异常: {base['id']}, {e}")
             self.recipe_list_table.setRowCount(len(all_items))
             self.recipe_list_table.setHorizontalHeaderItem(0, QTableWidgetItem(""))
+            icon_size = self.recipe_list_table.verticalHeader().defaultSectionSize()
             for row, item in enumerate(all_items):
                 index_item = QTableWidgetItem(str(row + 1))
                 index_item.setTextAlignment(Qt.AlignCenter)
                 self.recipe_list_table.setItem(row, 0, index_item)
-                name_item = QTableWidgetItem(item['name'])
-                self.recipe_list_table.setItem(row, 1, name_item)
+                icon_item = get_item_icon_item(item['name'], icon_size=icon_size)
+                icon_item.setData(Qt.UserRole, {'type': item['item_type'], 'id': item['id']})
+                self.recipe_list_table.setItem(row, 1, icon_item)
+                self.recipe_list_table.setRowHeight(row, icon_size)
                 type_item = QTableWidgetItem(item['type'])
                 self.recipe_list_table.setItem(row, 2, type_item)
                 quantity_item = QTableWidgetItem(self.format_number(item['output_quantity']))
                 self.recipe_list_table.setItem(row, 3, quantity_item)
-                name_item.setData(Qt.UserRole, {'type': item['item_type'], 'id': item['id']})
             self.recipe_list_table.setVisible(True)
             self.filter_recipe_list()
             # 刷新后清空右侧详情
@@ -1450,9 +1552,12 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.calculate_button.setText("计算材料需求")
         requirements = result.get('requirements', [])
         self.result_table.setRowCount(len(requirements))
+        icon_size = self.result_table.verticalHeader().defaultSectionSize()
         for i, req in enumerate(requirements):
-            self.result_table.setItem(i, 0, QTableWidgetItem(req['name']))
-            self.result_table.setItem(i, 1, QTableWidgetItem(str(req['quantity'])))
+            icon_item = get_item_icon_item(req['name'], icon_size=icon_size)
+            self.result_table.setItem(i, 0, icon_item)
+            self.result_table.setRowHeight(i, icon_size)
+            self.result_table.setItem(i, 1, QTableWidgetItem(str(int(float(req['quantity'])))))
         self.result_table.setEditTriggers(QTableWidget.NoEditTriggers)
         # 重新从表格获取已选配方，保证分解树和计算一致
         items = []
@@ -1502,25 +1607,26 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.recipe_tree.expandAll()
     
     def create_tree_item(self, data: Dict[str, Any]) -> QTreeWidgetItem:
-        """创建树形项"""
+        """创建树形项（带图标）"""
         item_name = data.get('name', f"ID: {data['id']}")
         item_type = data['type']
         quantity = data['quantity']
-        
         item_type_map = {
             'base': '原材料',
             'material': '半成品', 
             'product': '成品'
         }
         type_text = item_type_map.get(item_type, item_type)
-        
         tree_item = QTreeWidgetItem([item_name, self.format_number(quantity), type_text])
-        
-        # 递归添加子项
+        icon_path = os.path.join("icon", f"{item_name}.png")
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path)
+            if not pixmap.isNull():
+                pixmap = pixmap.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                tree_item.setIcon(0, QIcon(pixmap))
         for child_data in data.get('children', []):
             child_item = self.create_tree_item(child_data)
             tree_item.addChild(child_item)
-        
         return tree_item
     
     def view_recipe(self, item_type: str, item_id: int):
@@ -1586,12 +1692,11 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         result_dialog.exec()
     
     def create_tree_item_for_dialog(self, data: Dict[str, Any]) -> QTreeWidgetItem:
-        # 递归构建树节点
-        item = QTreeWidgetItem([
-            data.get('name', ''),
-            str(data.get('quantity', '')),
-            data.get('type', '')
-        ])
+        item = QTreeWidgetItem(["", str(data.get('quantity', '')), data.get('type', '')])
+        icon_item = get_item_icon_item(data.get('name', ''))
+        # 这里假设 self.recipe_detail_tree 存在
+        if hasattr(self, 'recipe_detail_tree'):
+            self.recipe_detail_tree.setItemWidget(item, 0, icon_item)
         for child in data.get('children', []):
             item.addChild(self.create_tree_item_for_dialog(child))
         return item
@@ -1769,10 +1874,7 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
             except Exception as e:
                 self.show_message(f"迁移失败: {str(e)}", "error")
     
-    def on_item_double_clicked(self, item):
-        """物品双击事件"""
-        self.add_selected_item()
-    
+
     def show_message(self, message: str, msg_type: str = "info"):
         """显示消息"""
         if FLUENT_AVAILABLE:
@@ -1958,16 +2060,21 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         """刷新需求表格"""
         self.requirements_table.setRowCount(len(self.current_requirements))
         
+        icon_size = self.requirements_table.verticalHeader().defaultSectionSize()
         for row, req in enumerate(self.current_requirements):
             # 类型
             type_text = "原材料" if req['type'] == "base" else "半成品"
-            self.requirements_table.setItem(row, 0, QTableWidgetItem(type_text))
+            icon_item = get_item_icon_item(req['name'], icon_size=icon_size)
+            self.requirements_table.setItem(row, 0, icon_item)
+            self.requirements_table.setRowHeight(row, icon_size)
             
             # 名称
             self.requirements_table.setItem(row, 1, QTableWidgetItem(req['name']))
+            self.requirements_table.setRowHeight(row, icon_size)
             
             # 数量
             self.requirements_table.setItem(row, 2, QTableWidgetItem(self.format_number(req['quantity'])))
+            self.requirements_table.setRowHeight(row, icon_size)
             
             # 删除按钮
             delete_button = QPushButton("删除")
@@ -2444,6 +2551,36 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.calculator = BOMCalculator(self.db_manager)
         self.csv_importer = CSVImporter(self.db_manager)
 
+    def eventFilter(self, obj, event):
+        if hasattr(self, 'selected_table') and self.selected_table is not None:
+            if obj == self.selected_table and event.type() == QEvent.KeyPress and event.key() == Qt.Key_Delete:
+                selected = sorted(set(idx.row() for idx in self.selected_table.selectedIndexes()), reverse=True)
+                for row in selected:
+                    self.selected_table.removeRow(row)
+                return True
+        return super().eventFilter(obj, event)
+
+    def update_item_quantity(self, row, value):
+        # 获取 output_quantity
+        spin = self.selected_table.cellWidget(row, 2)
+        name_item = self.selected_table.item(row, 0)
+        if not name_item or not spin:
+            return
+        name = name_item.text()
+        type_item = self.selected_table.item(row, 1)
+        type_text = type_item.text() if type_item else "成品"
+        if type_text == "成品":
+            db_item = self.db_manager.get_product_by_name(name)
+        else:
+            db_item = self.db_manager.get_material_by_name(name)
+        output_quantity = db_item['output_quantity'] if db_item and 'output_quantity' in db_item else 1
+        # 自动向上取整为倍数
+        if value % output_quantity != 0:
+            new_value = ((value + output_quantity - 1) // output_quantity) * output_quantity
+            spin.blockSignals(True)
+            spin.setValue(new_value)
+            spin.blockSignals(False)
+
 
 class SearchableDropdown(QFrame):
     """自定义下拉带搜索框控件"""
@@ -2550,6 +2687,17 @@ class SearchableComboBox(QComboBox):
     def clear(self):
         super().clear()
         self.setEditText("")
+
+
+def get_item_icon_item(item_name: str, icon_dir: str = "icon", icon_size: int = 48) -> QTableWidgetItem:
+    item = QTableWidgetItem(item_name)
+    icon_path = os.path.join(icon_dir, f"{item_name}.png")
+    if os.path.exists(icon_path):
+        pixmap = QPixmap(icon_path)
+        if not pixmap.isNull():
+            pixmap = pixmap.scaled(icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            item.setIcon(QIcon(pixmap))
+    return item
 
 
 def main():
