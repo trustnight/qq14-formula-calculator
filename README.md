@@ -1,6 +1,10 @@
 # FFXIV 配方计算器
 
-![声明](image/README/1752901666285.png)
+# ⚠️ 重要声明 ⚠️
+
+## <span style="color:red;font-size:2em">❗ 本工具部分内容由AI生成 ❗</span>
+
+### <span style="color:red;font-size:1.5em">❗ 配方数据可能不完整，需要用户自行添加 ❗</span>
 
 一个用于《最终幻想XIV》的配方材料需求计算工具，支持复杂的多层级配方计算和批量管理。
 
