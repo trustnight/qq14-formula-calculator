@@ -128,6 +128,16 @@ class DatabaseManager:
             row = cursor.fetchone()
             return dict(row) if row else None
     
+    def update_base_material(self, material_id: int, name: str, description: str = None):
+        """更新原材料名称和描述"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE base_materials SET name = ?, description = ? WHERE id = ?',
+                (name, description, material_id)
+            )
+            conn.commit()
+    
     # 半成品操作
     def add_material(self, name: str, output_quantity: int = 1, description: str = None) -> int:
         """添加半成品"""

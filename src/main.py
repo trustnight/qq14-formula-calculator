@@ -1,5 +1,4 @@
-import sys
-import os
+
 from gui.main_window import main
 
 
