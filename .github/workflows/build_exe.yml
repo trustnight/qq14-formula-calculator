@@ -67,3 +67,14 @@ jobs:
           asset_path: dist/main/main.exe
           asset_name: main.exe
           asset_content_type: application/octet-stream
+
+      - name: Delete old tags (keep latest 5)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch --tags
+          tags=$(git tag --sort=-creatordate | grep '^v' | tail -n +6)
+          for tag in $tags; do
+            echo "Deleting tag $tag"
+            git push --delete origin $tag
+          done
