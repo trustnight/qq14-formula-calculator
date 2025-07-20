@@ -7,7 +7,14 @@ a = Analysis(
     pathex=['.', 'src'],
     binaries=[],
     datas=[('icon/*', 'icon'), ('ffixv_recipes.db', '.')],
-    hiddenimports=['qfluentwidgets', 'loguru'],
+    hiddenimports=[
+        'PySide6',
+        'PySide6.QtCore',
+        'PySide6.QtGui',
+        'PySide6.QtWidgets',
+        'qfluentwidgets',
+        'loguru'
+    ],
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
