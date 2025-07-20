@@ -25,5 +25,5 @@ def extract_resource_to_cwd(resource_name, target_name=None):
 if __name__ == "__main__":
     # 仅在打包环境下释放数据库到根目录
     if hasattr(sys, '_MEIPASS'):
-        extract_resource_to_cwd('database/ffixv_recipes.db', 'ffixv_recipes.db')
+        extract_resource_to_cwd('ffixv_recipes.db')
     main()

@@ -3,27 +3,25 @@
 block_cipher = None
 
 a = Analysis(
-    ['src/main.py'],
-    pathex=[],
+    ['main.py'],
+    pathex=['.', 'src'],
     binaries=[],
-    datas=[
-        ('icon/*', 'icon'),
-        ('database/ffixv_recipes.db', 'database'),
-    ],
+    datas=[('icon/*', 'icon'), ('ffixv_recipes.db', '.')],
     hiddenimports=['qfluentwidgets', 'loguru'],
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
+    noarchive=False,
+    optimize=0,
 )
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='qq14-formula-calculator',
     debug=False,
     bootloader_ignore_signals=False,
@@ -33,13 +31,3 @@ exe = EXE(
     icon='icon/logo_use.png',
     onefile=True
 )
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='main'
-) 

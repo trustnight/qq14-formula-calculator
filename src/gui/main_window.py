@@ -36,6 +36,8 @@ from core.csv_importer import CSVImporter
 from core.data_migrator import DataMigrator
 from config import ICON_SIZE, GRID_SIZE, ICON_SPACING, TABLE_ROW_HEIGHT
 
+ICON_DIR = os.path.join('icon')
+
 
 class CustomQuantityWidget(QWidget):
     """自定义数量输入控件，包含-10、-1、+1、+10按钮"""
@@ -337,7 +339,7 @@ class CreateMissingItemDialog(QDialog):
             'name': req_name,
             'quantity': req_quantity
         })
-        icon_path = os.path.join("icon", f"{req_name}.png")
+        icon_path = resource_path(os.path.join(ICON_DIR, f"{req_name}.png"))
         if os.path.exists(icon_path):
             list_item.setIcon(QIcon(icon_path))
         self.requirements_list.addItem(list_item)
@@ -506,7 +508,7 @@ class RecipeAddDialog(QDialog):
         for name in items:
             item = QListWidgetItem(name)
             real_name = name.split(":")[-1].strip()
-            icon_path = os.path.join("icon", f"{real_name}.png")
+            icon_path = resource_path(os.path.join(ICON_DIR, f"{real_name}.png"))
             if os.path.exists(icon_path):
                 item.setIcon(QIcon(icon_path))
             self.option_list.addItem(item)
@@ -621,7 +623,7 @@ class RecipeAddDialog(QDialog):
                             'name': req_item['name'],
                             'quantity': req['quantity']
                         })
-                        icon_path = os.path.join("icon", f"{req_item['name']}.png")
+                        icon_path = resource_path(os.path.join(ICON_DIR, f"{req_item['name']}.png"))
                         if os.path.exists(icon_path):
                             list_item.setIcon(QIcon(icon_path))
                         self.requirements_list.addItem(list_item)
@@ -734,13 +736,19 @@ class DataMigrator:
             }
 
 
+def resource_path(relative_path):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath('.'), relative_path)
+
+
 class FFXIVCalculatorWindow(QMainWindow):
     """FFXIV配方计算器主窗口"""
     
     def __init__(self):
         super().__init__()
         # 设置窗口图标
-        self.setWindowIcon(QIcon(os.path.join("icon", "logo_use.png")))
+        self.setWindowIcon(QIcon(resource_path(os.path.join(ICON_DIR, 'logo_use.png'))))
         
         # 设置窗口标题和标志
         self.setWindowTitle("FFXIV 配方计算器")
@@ -1526,7 +1534,7 @@ class FFXIVCalculatorWindow(QMainWindow):
         for item in items:
             icon_item = QListWidgetItem()
             icon_item.setText(item['name'])
-            icon_path = os.path.join("icon", f"{item['name']}.png")
+            icon_path = resource_path(os.path.join(ICON_DIR, f"{item['name']}.png"))
             if os.path.exists(icon_path):
                 pixmap = QPixmap(icon_path)
                 if not pixmap.isNull():
@@ -1941,7 +1949,7 @@ class FFXIVCalculatorWindow(QMainWindow):
         }
         type_text = item_type_map.get(item_type, item_type)
         tree_item = QTreeWidgetItem([item_name, self.format_number(quantity), type_text])
-        icon_path = os.path.join("icon", f"{item_name}.png")
+        icon_path = resource_path(os.path.join(ICON_DIR, f"{item_name}.png"))
         if os.path.exists(icon_path):
             pixmap = QPixmap(icon_path)
             if not pixmap.isNull():
@@ -3012,9 +3020,9 @@ class SearchableComboBox(QComboBox):
         self.setEditText("")
 
 
-def get_item_icon_item(item_name: str, icon_dir: str = "icon", icon_size: int = 128) -> QTableWidgetItem:
+def get_item_icon_item(item_name: str, icon_dir: str = ICON_DIR, icon_size: int = 128) -> QTableWidgetItem:
     item = QTableWidgetItem(item_name)
-    icon_path = os.path.join(icon_dir, f"{item_name}.png")
+    icon_path = resource_path(os.path.join(icon_dir, f"{item_name}.png"))
     if os.path.exists(icon_path):
         pixmap = QPixmap(icon_path)
         if not pixmap.isNull():
@@ -3031,7 +3039,7 @@ def main():
     app.setApplicationVersion("2.0")
     app.setOrganizationName("FFXIV Tools")
     # 设置全局应用图标
-    app.setWindowIcon(QIcon(os.path.join("icon", "logo_use.png")))
+    app.setWindowIcon(QIcon(resource_path(os.path.join('icon', 'logo_use.png'))))
     # 创建主窗口
     window = FFXIVCalculatorWindow()
     window.show()

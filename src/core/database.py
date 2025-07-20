@@ -1,15 +1,14 @@
-import sqlite3
+import sys
 import os
+import sqlite3
 from typing import List, Dict, Any, Optional
 from contextlib import contextmanager
-
 
 class DatabaseManager:
     """数据库管理类，负责SQLite数据库的创建、连接和操作"""
     
     def __init__(self, db_path: str = None):
         if db_path is None:
-            # 默认数据库路径为根目录
             self.db_path = os.path.join(os.getcwd(), 'ffixv_recipes.db')
         else:
             self.db_path = db_path
