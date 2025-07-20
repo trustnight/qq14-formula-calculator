@@ -2,7 +2,7 @@ name: Build Windows EXE
 
 on:
   push:
-    tags:
+标签:
       - 'v*'
 
 jobs:
