@@ -739,6 +739,8 @@ class FFXIVCalculatorWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        # 设置窗口图标
+        self.setWindowIcon(QIcon(os.path.join("icon", "logo_use.png")))
         
         # 设置窗口标题和标志
         self.setWindowTitle("FFXIV 配方计算器")
@@ -3024,16 +3026,15 @@ def get_item_icon_item(item_name: str, icon_dir: str = "icon", icon_size: int = 
 def main():
     """主函数"""
     app = QApplication(sys.argv)
-    
     # 设置应用信息
     app.setApplicationName("FFXIV配方计算器")
     app.setApplicationVersion("2.0")
     app.setOrganizationName("FFXIV Tools")
-    
+    # 设置全局应用图标
+    app.setWindowIcon(QIcon(os.path.join("icon", "logo_use.png")))
     # 创建主窗口
     window = FFXIVCalculatorWindow()
     window.show()
-    
     sys.exit(app.exec())
 
 
