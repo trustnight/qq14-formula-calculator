@@ -78,3 +78,4 @@ jobs:
             echo "Deleting tag $tag"
             git push --delete origin $tag
           done
+        shell: bash
