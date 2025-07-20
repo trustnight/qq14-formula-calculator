@@ -64,8 +64,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/main/qq14-formula-calculator.exe
-          asset_name: qq14-formula-calculator.exe
+          asset_path: dist/main/main.exe
+          asset_name: main.exe
           asset_content_type: application/octet-stream
 
       - name: Delete old tags (keep latest 5)
