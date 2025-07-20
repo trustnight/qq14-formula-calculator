@@ -9,15 +9,11 @@ class DatabaseManager:
     
     def __init__(self, db_path: str = None):
         if db_path is None:
-            # 默认数据库路径
-            self.db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'ffixv_recipes.db')
+            # 默认数据库路径为根目录
+            self.db_path = os.path.join(os.getcwd(), 'ffixv_recipes.db')
         else:
             self.db_path = db_path
-        
-        # 确保数据库目录存在
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        
-        # 初始化数据库
+        # 不再创建任何目录
         self.init_database()
     
     @contextmanager

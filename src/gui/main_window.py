@@ -842,7 +842,7 @@ class FFXIVCalculatorWindow(QMainWindow):
         else:
             self.fluent_widget = None
         
-        self.db_manager = DatabaseManager()
+        self.db_manager = DatabaseManager()  # 默认用根目录
         self.calculator = BOMCalculator(self.db_manager)
         self.csv_importer = CSVImporter(self.db_manager)
         

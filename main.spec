@@ -8,9 +8,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('icon/*', 'icon'),
-        ('recipes.csv', '.'),
-        ('src/database/ffixv_recipes.db', 'src/database'),
-        ('src/config.py', 'src'),
+        ('database/ffixv_recipes.db', 'database'),
     ],
     hiddenimports=['qfluentwidgets', 'loguru'],
     hookspath=[],
@@ -32,7 +30,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    icon='icon/logo_use.ico',
+    icon='icon/logo_use.png',
     onefile=True
 )
 coll = COLLECT(

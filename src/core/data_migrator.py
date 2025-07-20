@@ -9,7 +9,7 @@ class DataMigrator:
     
     def __init__(self, db_manager: DatabaseManager = None, json_data_path: str = None):
         if db_manager is None:
-            self.db_manager = DatabaseManager()
+            self.db_manager = DatabaseManager()  # 默认用根目录
         else:
             self.db_manager = db_manager
             

@@ -14,7 +14,7 @@ from .database import DatabaseManager
 class CSVImporter:
     """适配实际CSV格式的导入器，只支持中文列头"""
     def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
+        self.db_manager = db_manager  # 由外部传入，已保证用根目录
 
     def import_from_csv(self, csv_file_path: str) -> Dict[str, Any]:
         """
