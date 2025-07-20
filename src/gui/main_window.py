@@ -34,6 +34,165 @@ from core.database import DatabaseManager
 from core.calculator import BOMCalculator
 from core.csv_importer import CSVImporter
 from core.data_migrator import DataMigrator
+from config import ICON_SIZE, GRID_SIZE, ICON_SPACING, TABLE_ROW_HEIGHT
+
+
+class CustomQuantityWidget(QWidget):
+    """自定义数量输入控件，包含-10、-1、+1、+10按钮"""
+    
+    valueChanged = Signal(int)
+    
+    def __init__(self, parent=None, output_quantity=1):
+        super().__init__(parent)
+        self.output_quantity = output_quantity
+        self.current_value = output_quantity
+        self.min_value = output_quantity
+        self.max_value = 9999
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(2)
+        
+        # 创建按钮
+        self.minus_10_btn = QPushButton("-10")
+        self.minus_1_btn = QPushButton("-1")
+        self.quantity_edit = QLineEdit(str(self.current_value))
+        self.plus_1_btn = QPushButton("+1")
+        self.plus_10_btn = QPushButton("+10")
+        
+        # 设置按钮样式
+        button_style = """
+        QPushButton {
+            border: 1px solid #cccccc;
+            border-radius: 3px;
+            padding: 2px 4px;
+            background-color: #f8f9fa;
+            min-width: 20px;
+            max-width: 20px;
+            font-size: 10px;
+        }
+        QPushButton:hover {
+            background-color: #e9ecef;
+        }
+        QPushButton:pressed {
+            background-color: #dee2e6;
+        }
+        QPushButton:disabled {
+            background-color: #f1f3f4;
+            color: #9aa0a6;
+        }
+        """
+        
+        self.minus_10_btn.setStyleSheet(button_style)
+        self.minus_1_btn.setStyleSheet(button_style)
+        self.plus_1_btn.setStyleSheet(button_style)
+        self.plus_10_btn.setStyleSheet(button_style)
+        
+        # 设置数量编辑框样式
+        self.quantity_edit.setStyleSheet("""
+        QLineEdit {
+            border: 1px solid #cccccc;
+            border-radius: 3px;
+            padding: 2px 6px;
+            background-color: white;
+            min-width: 30px;
+            text-align: center;
+            font-weight: bold;
+        }
+        """)
+        self.quantity_edit.setAlignment(Qt.AlignCenter)
+        
+        # 连接信号
+        self.minus_10_btn.clicked.connect(lambda: self.adjust_value(-10))
+        self.minus_1_btn.clicked.connect(lambda: self.adjust_value(-1))
+        self.plus_1_btn.clicked.connect(lambda: self.adjust_value(1))
+        self.plus_10_btn.clicked.connect(lambda: self.adjust_value(10))
+        self.quantity_edit.editingFinished.connect(self.on_edit_finished)
+        
+        # 添加到布局
+        layout.addWidget(self.minus_10_btn)
+        layout.addWidget(self.minus_1_btn)
+        layout.addWidget(self.quantity_edit)
+        layout.addWidget(self.plus_1_btn)
+        layout.addWidget(self.plus_10_btn)
+        
+        # 初始更新按钮状态
+        self.update_button_states()
+    
+    def on_edit_finished(self):
+        """处理直接编辑完成事件"""
+        try:
+            new_value = int(self.quantity_edit.text())
+            if new_value != self.current_value:
+                self.setValue(new_value)
+                self.valueChanged.emit(self.current_value)
+        except ValueError:
+            # 如果输入的不是有效数字，恢复原值
+            self.quantity_edit.setText(str(self.current_value))
+    
+    def adjust_value(self, delta):
+        """调整数值，自动向上取整为output_quantity的倍数"""
+        new_value = self.current_value + delta
+        
+        # 确保在范围内
+        if new_value < self.min_value:
+            new_value = self.min_value
+        elif new_value > self.max_value:
+            new_value = self.max_value
+        
+        # 如果不是output_quantity的倍数，向上取整
+        if new_value % self.output_quantity != 0:
+            new_value = ((new_value + self.output_quantity - 1) // self.output_quantity) * self.output_quantity
+        
+        if new_value != self.current_value:
+            self.current_value = new_value
+            self.quantity_edit.setText(str(self.current_value))
+            self.update_button_states()
+            self.valueChanged.emit(self.current_value)
+    
+    def update_button_states(self):
+        """更新按钮的启用状态"""
+        self.minus_10_btn.setEnabled(self.current_value > self.min_value)
+        self.minus_1_btn.setEnabled(self.current_value > self.min_value)
+        self.plus_1_btn.setEnabled(self.current_value < self.max_value)
+        self.plus_10_btn.setEnabled(self.current_value < self.max_value)
+    
+    def setValue(self, value):
+        """设置数值"""
+        if value % self.output_quantity != 0:
+            value = ((value + self.output_quantity - 1) // self.output_quantity) * self.output_quantity
+        
+        if value < self.min_value:
+            value = self.min_value
+        elif value > self.max_value:
+            value = self.max_value
+        
+        if value != self.current_value:
+            self.current_value = value
+            self.quantity_edit.setText(str(self.current_value))
+            self.update_button_states()
+    
+    def value(self):
+        """获取当前数值"""
+        return self.current_value
+    
+    def setMinimum(self, min_value):
+        """设置最小值"""
+        self.min_value = max(1, min_value)
+        if self.current_value < self.min_value:
+            self.setValue(self.min_value)
+        else:
+            self.update_button_states()
+    
+    def setMaximum(self, max_value):
+        """设置最大值"""
+        self.max_value = max_value
+        if self.current_value > self.max_value:
+            self.setValue(self.max_value)
+        else:
+            self.update_button_states()
 
 
 class CalculationWorker(QThread):
@@ -343,7 +502,14 @@ class RecipeAddDialog(QDialog):
         if search_text:
             items = [i for i in items if search_text in i.lower()]
         self.option_list.clear()
-        self.option_list.addItems(items)
+        # 自动为每个物品加图标
+        for name in items:
+            item = QListWidgetItem(name)
+            real_name = name.split(":")[-1].strip()
+            icon_path = os.path.join("icon", f"{real_name}.png")
+            if os.path.exists(icon_path):
+                item.setIcon(QIcon(icon_path))
+            self.option_list.addItem(item)
     
     def add_selected_option(self):
         # 支持多选添加
@@ -568,11 +734,112 @@ class DataMigrator:
             }
 
 
-class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
+class FFXIVCalculatorWindow(QMainWindow):
     """FFXIV配方计算器主窗口"""
     
     def __init__(self):
         super().__init__()
+        
+        # 设置窗口标题和标志
+        self.setWindowTitle("FFXIV 配方计算器")
+        self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)
+        
+        # 创建 FluentWindow 作为中央组件
+        if FLUENT_AVAILABLE:
+            self.fluent_widget = FluentWindow()
+            # 完全移除 FluentWindow 的标题栏和边框
+            self.fluent_widget.setWindowFlags(Qt.Widget)
+            # 强制隐藏标题栏和返回按钮
+            self.fluent_widget.setStyleSheet("""
+                QWidget[class="titleBar"] {
+                    display: none !important;
+                }
+                QWidget[class="windowTitleBar"] {
+                    display: none !important;
+                }
+                QWidget[class="FluentWindowTitleBar"] {
+                    display: none !important;
+                }
+                QWidget[objectName="titleBar"] {
+                    display: none !important;
+                }
+                QWidget[objectName="windowTitleBar"] {
+                    display: none !important;
+                }
+                QWidget[class="returnButton"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[objectName="returnButton"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[class="returnButtonWidget"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[objectName="returnButtonWidget"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[class*="return"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[objectName*="return"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[class*="back"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[objectName*="back"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[class*="menu"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[objectName*="menu"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[class*="hamburger"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[objectName*="hamburger"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[class*="toggle"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+                QWidget[objectName*="toggle"] {
+                    display: none !important;
+                    max-height: 0px !important;
+                    max-width: 0px !important;
+                }
+            """)
+        else:
+            self.fluent_widget = None
+        
         self.db_manager = DatabaseManager()
         self.calculator = BOMCalculator(self.db_manager)
         self.csv_importer = CSVImporter(self.db_manager)
@@ -580,6 +847,7 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.selected_items = []  # 选中的配方列表
         
         self.current_selected_item = None  # 初始化当前选中物品
+        
         self.init_ui()
         self.load_data()
     
@@ -594,36 +862,103 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
     
     def init_ui(self):
         """初始化用户界面"""
-        try:
-            self.setTitle("FFXIV 配方计算器")
-        except AttributeError:
-            self.setWindowTitle("FFXIV 配方计算器")
         self.setGeometry(100, 100, 1200, 800)
         
-        if FLUENT_AVAILABLE:
+        if FLUENT_AVAILABLE and self.fluent_widget:
             self.init_fluent_ui()
+            # 将 FluentWindow 设置为中央组件
+            self.setCentralWidget(self.fluent_widget)
         else:
             self.init_standard_ui()
     
     def init_fluent_ui(self):
         """初始化Fluent Design界面"""
-        # 设置导航栏宽度
-        self.navigationInterface.setExpandWidth(200)  # 设置展开宽度为200px
+        # 强制隐藏 FluentWindow 的标题栏
+        try:
+            # 尝试直接隐藏标题栏
+            if hasattr(self.fluent_widget, 'titleBar'):
+                self.fluent_widget.titleBar.hide()
+                self.fluent_widget.titleBar.setVisible(False)
+            if hasattr(self.fluent_widget, 'windowTitleBar'):
+                self.fluent_widget.windowTitleBar.hide()
+                self.fluent_widget.windowTitleBar.setVisible(False)
+            
+            # 遍历所有子组件，隐藏标题栏、返回按钮和汉堡菜单相关的组件
+            for child in self.fluent_widget.findChildren(QWidget):
+                child_name = child.objectName().lower()
+                child_class = child.className().lower()
+                if ('title' in child_name or 'title' in child_class or 
+                    'return' in child_name or 'return' in child_class or
+                    'back' in child_name or 'back' in child_class or
+                    'menu' in child_name or 'menu' in child_class or
+                    'hamburger' in child_name or 'hamburger' in child_class or
+                    'toggle' in child_name or 'toggle' in child_class):
+                    child.hide()
+                    child.setVisible(False)
+        except Exception as e:
+            logger.debug(f"隐藏标题栏时出错: {e}")
+        
+        # 确保 FluentWindow 正确初始化
+        if hasattr(self.fluent_widget, 'navigationInterface'):
+            # 设置导航栏宽度
+            self.fluent_widget.navigationInterface.setExpandWidth(200)  # 设置展开宽度为200px
+            # 隐藏返回按钮（左箭头）
+            try:
+                # 隐藏返回按钮
+                if hasattr(self.fluent_widget.navigationInterface, 'returnButton'):
+                    self.fluent_widget.navigationInterface.returnButton.hide()
+                    self.fluent_widget.navigationInterface.returnButton.setVisible(False)
+                # 隐藏返回按钮区域
+                if hasattr(self.fluent_widget.navigationInterface, 'returnButtonWidget'):
+                    self.fluent_widget.navigationInterface.returnButtonWidget.hide()
+                    self.fluent_widget.navigationInterface.returnButtonWidget.setVisible(False)
+                
+                # 强制隐藏所有可能的返回按钮
+                for child in self.fluent_widget.navigationInterface.findChildren(QWidget):
+                    child_name = child.objectName().lower()
+                    if any(keyword in child_name for keyword in ['return', 'back', 'arrow']):
+                        child.hide()
+                        child.setVisible(False)
+                        child.setMaximumHeight(0)
+                        child.setMaximumWidth(0)
+                
+                # 设置导航栏的返回按钮区域高度为0
+                if hasattr(self.fluent_widget.navigationInterface, 'setReturnButtonVisible'):
+                    self.fluent_widget.navigationInterface.setReturnButtonVisible(False)
+                
+                # 单独处理汉堡菜单按钮
+                try:
+                    # 尝试隐藏汉堡菜单按钮
+                    if hasattr(self.fluent_widget.navigationInterface, 'collapseButton'):
+                        self.fluent_widget.navigationInterface.collapseButton.hide()
+                        self.fluent_widget.navigationInterface.collapseButton.setVisible(False)
+                    if hasattr(self.fluent_widget.navigationInterface, 'toggleButton'):
+                        self.fluent_widget.navigationInterface.toggleButton.hide()
+                        self.fluent_widget.navigationInterface.toggleButton.setVisible(False)
+                except Exception as e:
+                    logger.debug(f"隐藏汉堡菜单时出错: {e}")
+                    
+            except Exception as e:
+                logger.debug(f"隐藏返回按钮时出错: {e}")
         
         # 创建各个页面
         self.create_calculator_page()
         self.create_recipe_management_page()
         
         # 添加导航项
-        self.addSubInterface(
-            self.calculator_page, FluentIcon.COMMAND_PROMPT, "计算器"
-        )
-        self.addSubInterface(
-            self.recipe_page, FluentIcon.BOOK_SHELF, "配方管理"
-        )
+        if hasattr(self.fluent_widget, 'addSubInterface'):
+            self.fluent_widget.addSubInterface(
+                self.calculator_page, FluentIcon.COMMAND_PROMPT, "计算器"
+            )
+            self.fluent_widget.addSubInterface(
+                self.recipe_page, FluentIcon.BOOK_SHELF, "配方管理"
+            )
         
         # 连接页面切换事件
-        self.stackedWidget.currentChanged.connect(self.on_page_changed)
+        if hasattr(self.fluent_widget, 'stackedWidget'):
+            self.fluent_widget.stackedWidget.currentChanged.connect(self.on_page_changed)
+    
+
     
     def init_standard_ui(self):
         """初始化标准界面"""
@@ -657,6 +992,8 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.calculator_page.setObjectName("calculator_page")
         
         layout = QHBoxLayout(self.calculator_page)
+        layout.setContentsMargins(0, 0, 0, 0)  # 移除所有边距
+        layout.setSpacing(0)  # 移除间距
         
         # 左侧：配方选择和列表
         left_widget = self.create_recipe_selection_widget()
@@ -679,6 +1016,8 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         else:
             widget = QGroupBox("配方选择")
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(5, 5, 5, 5)  # 设置很小的边距
+        layout.setSpacing(5)  # 设置很小的间距
         # 搜索框
         search_layout = QHBoxLayout()
         search_layout.addWidget(QLabel("搜索:"))
@@ -704,10 +1043,10 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         # 物品表格
         self.item_table = QListWidget()
         self.item_table.setViewMode(QListView.IconMode)
-        self.item_table.setIconSize(QSize(48, 48))
-        self.item_table.setGridSize(QSize(120, 80))
+        self.item_table.setIconSize(QSize(ICON_SIZE, ICON_SIZE))
+        self.item_table.setGridSize(QSize(GRID_SIZE, GRID_SIZE))
         self.item_table.setResizeMode(QListView.Adjust)
-        self.item_table.setSpacing(10)
+        self.item_table.setSpacing(ICON_SPACING)
         self.item_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.item_table.itemDoubleClicked.connect(self.on_item_double_clicked)
         layout.addWidget(self.item_table)
@@ -733,7 +1072,7 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         self.selected_table.setHorizontalHeaderLabels(["名称", "类型", "数量"])
         self.selected_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.selected_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.selected_table.verticalHeader().setDefaultSectionSize(28)
+        self.selected_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
         self.selected_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.selected_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.selected_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -794,21 +1133,14 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
             type_item = QTableWidgetItem(type_text)
             type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
             self.selected_table.setItem(row_pos, 1, type_item)
-            spin = QSpinBox()
-            spin.setMinimum(output_quantity)
-            spin.setMaximum(9999)
-            spin.setSingleStep(output_quantity)
-            spin.setValue(output_quantity)
-            spin.setMinimumWidth(60)
-            spin.setAlignment(Qt.AlignCenter)
-            spin.setStyleSheet("""
-            QSpinBox {
-                padding-left: 6px; padding-right: 24px;
-            }
-            """)
-            spin.valueChanged.connect(lambda value, idx=row_pos: self.update_item_quantity(idx, value))
-            self.selected_table.setCellWidget(row_pos, 2, spin)
-        self.selected_table.verticalHeader().setDefaultSectionSize(28)
+            # 使用自定义数量控件替代QSpinBox
+            quantity_widget = CustomQuantityWidget(output_quantity=output_quantity)
+            quantity_widget.setMinimum(output_quantity)
+            quantity_widget.setMaximum(9999)
+            quantity_widget.setValue(output_quantity)
+            quantity_widget.valueChanged.connect(lambda value, idx=row_pos: self.update_item_quantity(idx, value))
+            self.selected_table.setCellWidget(row_pos, 2, quantity_widget)
+        self.selected_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
         self.set_selected_table_column_widths()
 
     def on_item_double_clicked(self, item):
@@ -840,31 +1172,14 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         type_item = QTableWidgetItem(type_text)
         type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
         self.selected_table.setItem(row_pos, 1, type_item)
-        spin = QSpinBox()
-        spin.setMinimum(output_quantity)
-        spin.setMaximum(9999)
-        spin.setSingleStep(output_quantity)
-        spin.setValue(output_quantity)
-        spin.setMinimumWidth(60)
-        spin.setAlignment(Qt.AlignCenter)
-        spin.setStyleSheet("""
-        QSpinBox {
-            padding-left: 6px; padding-right: 24px;
-        }
-        QSpinBox::up-button, QSpinBox::down-button {
-            width: 22px;
-            border: 1px solid #888888;
-        }
-        QSpinBox::up-button {
-            border-bottom: 1px solid #888888;
-        }
-        QSpinBox::down-button {
-            border-top: none;
-        }
-        """)
-        spin.valueChanged.connect(lambda value, idx=row_pos: self.update_item_quantity(idx, value))
-        self.selected_table.setCellWidget(row_pos, 2, spin)
-        self.selected_table.verticalHeader().setDefaultSectionSize(28)
+        # 使用自定义数量控件替代QSpinBox
+        quantity_widget = CustomQuantityWidget(output_quantity=output_quantity)
+        quantity_widget.setMinimum(output_quantity)
+        quantity_widget.setMaximum(9999)
+        quantity_widget.setValue(output_quantity)
+        quantity_widget.valueChanged.connect(lambda value, idx=row_pos: self.update_item_quantity(idx, value))
+        self.selected_table.setCellWidget(row_pos, 2, quantity_widget)
+        self.selected_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
         self.set_selected_table_column_widths()
 
     def delete_selected_items(self):
@@ -882,18 +1197,22 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         if abs(h - target_h) > 2:
             self.resize(w, target_h)
         # 2. 动态调整表格行高和图标大小
-        icon_size = max(24, min(96, int(self.item_table.rowHeight(0)))) if self.item_table.rowCount() > 0 else 48
-        # item_table
-        self.item_table.verticalHeader().setDefaultSectionSize(icon_size)
+        # 修复：QListWidget 使用 count() 而不是 rowCount()，使用 sizeHintForRow() 而不是 rowHeight()
+        # if hasattr(self, 'item_table') and self.item_table:
+        #     if hasattr(self.item_table, 'count') and self.item_table.count() > 0:
+        #         icon_size = max(24, min(96, int(self.item_table.sizeHintForRow(0))))
+        #     else:
+        #         icon_size = 48
+        #     self.item_table.setIconSize(QSize(icon_size, icon_size))
         # selected_table
         if hasattr(self, 'selected_table'):
-            self.selected_table.verticalHeader().setDefaultSectionSize(icon_size)
+            self.selected_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
         # result_table
         if hasattr(self, 'result_table'):
-            self.result_table.verticalHeader().setDefaultSectionSize(icon_size)
+            self.result_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
         # recipe_list_table
         if hasattr(self, 'recipe_list_table'):
-            self.recipe_list_table.verticalHeader().setDefaultSectionSize(icon_size)
+            self.recipe_list_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
         # 其它表格可按需添加
         super().resizeEvent(event)
 
@@ -905,6 +1224,8 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
             widget = QGroupBox("计算结果")
         
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(5, 5, 5, 5)  # 设置很小的边距
+        layout.setSpacing(5)  # 设置很小的间距
         
         # 结果标题
         self.result_label = QLabel("计算结果将在这里显示")
@@ -1199,7 +1520,7 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         
         # 更新表格
         self.item_table.clear()
-        icon_size = 48
+        icon_size = self.item_table.iconSize().width()  # 仍然保持和 setIconSize 一致
         for item in items:
             icon_item = QListWidgetItem()
             icon_item.setText(item['name'])
@@ -2562,9 +2883,9 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
 
     def update_item_quantity(self, row, value):
         # 获取 output_quantity
-        spin = self.selected_table.cellWidget(row, 2)
+        quantity_widget = self.selected_table.cellWidget(row, 2)
         name_item = self.selected_table.item(row, 0)
-        if not name_item or not spin:
+        if not name_item or not quantity_widget:
             return
         name = name_item.text()
         type_item = self.selected_table.item(row, 1)
@@ -2574,12 +2895,12 @@ class FFXIVCalculatorWindow(FluentWindow if FLUENT_AVAILABLE else QMainWindow):
         else:
             db_item = self.db_manager.get_material_by_name(name)
         output_quantity = db_item['output_quantity'] if db_item and 'output_quantity' in db_item else 1
-        # 自动向上取整为倍数
+        # 自动向上取整为倍数（这个逻辑已经在CustomQuantityWidget中处理了）
         if value % output_quantity != 0:
             new_value = ((value + output_quantity - 1) // output_quantity) * output_quantity
-            spin.blockSignals(True)
-            spin.setValue(new_value)
-            spin.blockSignals(False)
+            quantity_widget.blockSignals(True)
+            quantity_widget.setValue(new_value)
+            quantity_widget.blockSignals(False)
 
 
 class SearchableDropdown(QFrame):
@@ -2689,7 +3010,7 @@ class SearchableComboBox(QComboBox):
         self.setEditText("")
 
 
-def get_item_icon_item(item_name: str, icon_dir: str = "icon", icon_size: int = 48) -> QTableWidgetItem:
+def get_item_icon_item(item_name: str, icon_dir: str = "icon", icon_size: int = 128) -> QTableWidgetItem:
     item = QTableWidgetItem(item_name)
     icon_path = os.path.join(icon_dir, f"{item_name}.png")
     if os.path.exists(icon_path):
