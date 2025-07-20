@@ -1,0 +1,57 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Convert PNG to ICO
+        run: |
+          python -c "from PIL import Image; Image.open('icon/logo_use.png').save('icon/logo_use.ico')"
+
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller --noconfirm --clean ^
+            --icon "icon/logo_use.ico" ^
+            --add-data "icon;icon" ^
+            --add-data "recipes.csv;." ^
+            --add-data "src/database/ffixv_recipes.db;src/database" ^
+            --add-data "src/config.py;src" ^
+            --hidden-import=qfluentwidgets ^
+            --hidden-import=loguru ^
+            --distpath dist ^
+            src/main.py
+
+      - name: Copy extra files to dist directory
+        run: |
+          copy README.md dist\main\
+          copy requirements.txt dist\main\
+
+      - name: List dist directory
+        run: |
+          dir dist\main
+
+      - name: Upload EXE and all files as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: qq14-formula-calculator-exe
+          path: dist/main/**
