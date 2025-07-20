@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,10 +34,14 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean main.spec
 
-      - name: Copy extra files to dist directory
+      - name: Copy README to dist
+        shell: pwsh
         run: |
-          copy README.md dist\main\
-          copy requirements.txt dist\main\
+          Copy-Item README.md dist/
+
+      - name: Copy requirements.txt to dist
+        run: |
+          Copy-Item requirements.txt dist/main/
 
       - name: List dist directory
         run: |
@@ -67,7 +73,10 @@ jobs:
               repo: context.repo.repo,
               per_page: 100
             });
-            const vReleases = releases.data.filter(r => r.tag_name.startsWith('v'));
+            // 按创建时间降序（最新的在前）
+            const vReleases = releases.data
+              .filter(r => r.tag_name.startsWith('v'))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             const toDelete = vReleases.slice(1); // 保留最新1个
             for (const rel of toDelete) {
               console.log(`Deleting release ${rel.tag_name}`);
