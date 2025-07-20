@@ -51,7 +51,7 @@ jobs:
           dir dist\main
 
       - name: Upload EXE and all files as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: qq14-formula-calculator-exe
           path: dist/main/**
