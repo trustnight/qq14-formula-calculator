@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QListView
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer, QRect, QPoint, QEvent, QSize
-from PySide6.QtGui import QFont, QIcon, QPixmap, QColor
+from PySide6.QtGui import QFont, QIcon, QPixmap, QColor, QPainter
 from loguru import logger
 
 try:
@@ -36,9 +36,65 @@ from core.csv_importer import CSVImporter
 from core.data_migrator import DataMigrator
 from config import ICON_SIZE, GRID_SIZE, ICON_SPACING, TABLE_ROW_HEIGHT
 
+DEBUG_LOG = False  # True开启debug日志，False关闭
+
+def debug_log(msg):
+    if DEBUG_LOG:
+        from loguru import logger
+        logger.debug(msg)
 ICON_DIR = os.path.join('icon')
 
+# icon路径分类辅助
+ICON_SUBDIRS = {
+    'product': os.path.join('icon', 'product'),
+    'material': os.path.join('icon', 'material'),
+    'base': os.path.join('icon', 'base'),
+}
 
+def get_icon_path(item_name, item_type=None):
+    # item_type: 'product'/'material'/'base'，优先用类型目录
+    if item_type in ICON_SUBDIRS:
+        path = resource_path(os.path.join(ICON_SUBDIRS[item_type], f"{item_name}.png"))
+        if path:
+            return path
+    # 兼容旧目录
+    path = resource_path(os.path.join('icon', f"{item_name}.png"))
+    if path:
+        return path
+    # 全部子目录兜底查找
+    for sub in ICON_SUBDIRS.values():
+        path = resource_path(os.path.join(sub, f"{item_name}.png"))
+        if path:
+            return path
+    return None
+
+def get_item_icon_item(item_name: str, item_type: str = None, icon_size: int = 128) -> QTableWidgetItem:
+    show_name = item_name
+    item = QTableWidgetItem(show_name)
+    icon_path = get_icon_path(item_name, item_type)
+    base_icon = None
+    if icon_path:
+        pixmap = QPixmap(icon_path)
+        if not pixmap.isNull():
+            pixmap = pixmap.scaled(icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            base_icon = QIcon(pixmap)
+    # 收藏品角标
+    if item_name.startswith("收藏用"):
+        scp_path = resource_path(os.path.join('icon', 'scp.png'))
+        if os.path.exists(scp_path):
+            scp_pixmap = QPixmap(scp_path).scaled(icon_size//2, icon_size//2, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            if base_icon:
+                base_pixmap = base_icon.pixmap(icon_size, icon_size)
+                painter = QPainter(base_pixmap)
+                painter.drawPixmap(base_pixmap.width()-scp_pixmap.width(), base_pixmap.height()-scp_pixmap.height(), scp_pixmap)
+                painter.end()
+                item.setIcon(QIcon(base_pixmap))
+            else:
+                item.setIcon(QIcon(scp_pixmap))
+            return item
+    if base_icon:
+        item.setIcon(base_icon)
+    return item
 class CustomQuantityWidget(QWidget):
     """自定义数量输入控件，包含-10、-1、+1、+10按钮"""
     
@@ -339,8 +395,8 @@ class CreateMissingItemDialog(QDialog):
             'name': req_name,
             'quantity': req_quantity
         })
-        icon_path = resource_path(os.path.join(ICON_DIR, f"{req_name}.png"))
-        if os.path.exists(icon_path):
+        icon_path = get_icon_path(req_name, 'base')
+        if icon_path:
             list_item.setIcon(QIcon(icon_path))
         self.requirements_list.addItem(list_item)
     
@@ -396,49 +452,27 @@ class CreateMissingItemDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"创建{self.item_type}失败: {str(e)}")
 
-
-class RecipeAddDialog(QDialog):
-    """分层级配方添加对话框"""
-    
-    def __init__(self, parent, db_manager, edit_mode=False, item_type=None, item_id=None):
-        logger.debug(f"[RecipeAddDialog.__init__] edit_mode={edit_mode}, item_type={item_type}, item_id={item_id}")
+class MaterialAddDialog(QDialog):
+    def __init__(self, parent, db_manager, initial_name=""):
         super().__init__(parent)
         self.db_manager = db_manager
-        self.edit_mode = edit_mode
-        self.item_type = item_type
-        self.item_id = item_id
-        if edit_mode:
-            self.setWindowTitle("编辑配方")
-        else:
-            self.setWindowTitle("添加配方")
+        self.setWindowTitle("添加半成品")
         self.setMinimumSize(600, 500)
         self.resize(700, 600)
-        self.init_ui()
-        logger.debug("[RecipeAddDialog.__init__] after init_ui")
-        # 如果是编辑模式，加载现有数据
-        if edit_mode and item_type and item_id:
-            logger.debug("[RecipeAddDialog.__init__] call load_existing_data")
-            self.load_existing_data()
-    
-    def init_ui(self):
-        logger.debug("[RecipeAddDialog.init_ui] start")
+        self.init_ui(initial_name)
+    def init_ui(self, initial_name=""):
         main_layout = QVBoxLayout(self)
         # 基本信息区
         basic_group = QGroupBox("基本信息")
         basic_layout = QVBoxLayout(basic_group)
         name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("配方名称:"))
+        name_layout.addWidget(QLabel("半成品名称:"))
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("请输入配方名称")
+        self.name_edit.setPlaceholderText("请输入半成品名称")
+        if initial_name:
+            self.name_edit.setText(initial_name)
         name_layout.addWidget(self.name_edit)
         basic_layout.addLayout(name_layout)
-        type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("配方类型:"))
-        self.type_combo = QComboBox()
-        self.type_combo.addItems(["成品", "半成品"])
-        self.type_combo.currentTextChanged.connect(self.update_option_list)
-        type_layout.addWidget(self.type_combo)
-        basic_layout.addLayout(type_layout)
         quantity_layout = QHBoxLayout()
         quantity_layout.addWidget(QLabel("产出数量:"))
         self.quantity_spin = QSpinBox()
@@ -450,7 +484,7 @@ class RecipeAddDialog(QDialog):
         # 配方需求区
         demand_group = QGroupBox("配方需求")
         demand_layout = QHBoxLayout(demand_group)
-        # 左列（4）：类型选择+搜索+可选项
+        # 左列：类型选择+搜索+可选项
         left_layout = QVBoxLayout()
         self.material_type_combo = QComboBox()
         self.material_type_combo.addItems(["全部", "原材料", "半成品"])
@@ -460,10 +494,20 @@ class RecipeAddDialog(QDialog):
         self.search_edit.setPlaceholderText("输入名称筛选...")
         self.search_edit.textChanged.connect(self.update_option_list)
         left_layout.addWidget(self.search_edit)
+        # 添加原材料按钮
+        self.add_base_material_btn = QPushButton("添加原材料")
+        self.add_base_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
+        self.add_base_material_btn.clicked.connect(self.on_add_base_material_in_dialog)
+        left_layout.addWidget(self.add_base_material_btn)
+        # 添加半成品按钮
+        self.add_material_btn = QPushButton("添加半成品")
+        self.add_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
+        self.add_material_btn.clicked.connect(self.on_add_material_in_dialog)
+        left_layout.addWidget(self.add_material_btn)
         self.option_list = QListWidget()
         self.option_list.setSelectionMode(QListWidget.ExtendedSelection)
         left_layout.addWidget(self.option_list)
-        # 中列（1）：添加/移除按钮
+        # 中列：添加/移除按钮
         mid_layout = QVBoxLayout()
         mid_layout.addStretch(2)
         self.add_btn = QPushButton("→ 添加")
@@ -473,7 +517,7 @@ class RecipeAddDialog(QDialog):
         self.remove_btn.clicked.connect(self.remove_selected_requirement)
         mid_layout.addWidget(self.remove_btn, alignment=Qt.AlignHCenter)
         mid_layout.addStretch(3)
-        # 右列（5）：已添加需求
+        # 右列：已添加需求
         right_layout = QVBoxLayout()
         right_layout.addWidget(QLabel("已添加需求："))
         self.requirements_list = QListWidget()
@@ -487,12 +531,11 @@ class RecipeAddDialog(QDialog):
         main_layout.addWidget(demand_group)
         # 按钮
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept_recipe)
+        button_box.accepted.connect(self.accept_material)
         button_box.rejected.connect(self.reject)
         main_layout.addWidget(button_box)
         # 初始化数据
         self.update_option_list()
-    
     def update_option_list(self):
         type_text = self.material_type_combo.currentText() if hasattr(self, 'material_type_combo') else "全部"
         search_text = self.search_edit.text().strip().lower() if hasattr(self, 'search_edit') else ""
@@ -504,33 +547,193 @@ class RecipeAddDialog(QDialog):
         if search_text:
             items = [i for i in items if search_text in i.lower()]
         self.option_list.clear()
-        # 自动为每个物品加图标
         for name in items:
             item = QListWidgetItem(name)
-            real_name = name.split(":")[-1].strip()
-            icon_path = resource_path(os.path.join(ICON_DIR, f"{real_name}.png"))
-            if os.path.exists(icon_path):
+            if name.startswith("原材料:"):
+                real_name = name.split(":", 1)[1].strip()
+                icon_path = get_icon_path(real_name, 'base')
+            elif name.startswith("半成品:"):
+                real_name = name.split(":", 1)[1].strip()
+                icon_path = get_icon_path(real_name, 'material')
+            else:
+                real_name = name
+                icon_path = get_icon_path(real_name)
+            if icon_path:
                 item.setIcon(QIcon(icon_path))
             self.option_list.addItem(item)
-    
+    def on_add_base_material_in_dialog(self):
+        # 自动带入当前搜索内容
+        initial_name = self.search_edit.text().strip()
+        name, ok = QInputDialog.getText(self, "添加原材料", "请输入原材料名称：", text=initial_name)
+        name = name.strip()
+        if ok and name:
+            if self.db_manager.get_base_material_by_name(name):
+                QMessageBox.warning(self, "警告", f"已存在原材料: {name}")
+                return
+            self.db_manager.add_base_material(name)
+            QMessageBox.information(self, "成功", f"已添加原材料: {name}")
+            self.update_option_list()
+    def on_add_material_in_dialog(self):
+        # 自动带入当前搜索内容
+        initial_name = self.search_edit.text().strip()
+        dialog = MaterialAddDialog(self, self.db_manager, initial_name=initial_name)
+        if dialog.exec() == QDialog.Accepted:
+            self.update_option_list()
     def add_selected_option(self):
-        # 支持多选添加
         for item in self.option_list.selectedItems():
             name = item.text()
-            # 检查是否已存在
             exists = False
             for i in range(self.requirements_list.count()):
-                if self.requirements_list.item(i).text().startswith(name):
+                # 只比对名称部分（不含数量）
+                base_name = self.requirements_list.item(i).text().split('x')[0].strip()
+                if base_name == name:
                     exists = True
                     break
             if not exists:
-                self.requirements_list.addItem(name)
-    
+                # 弹出数量输入框
+                quantity, ok = QInputDialog.getInt(self, "请输入数量", f"为 {name} 输入数量：", 1, 1, 9999, 1)
+                if not ok:
+                    continue
+                # 设置图标
+                if name.startswith("原材料:"):
+                    real_name = name.split(":", 1)[1].strip()
+                    icon_path = get_icon_path(real_name, 'base')
+                elif name.startswith("半成品:"):
+                    real_name = name.split(":", 1)[1].strip()
+                    icon_path = get_icon_path(real_name, 'material')
+                else:
+                    real_name = name
+                    icon_path = get_icon_path(real_name)
+                show_text = f"{name} x{quantity}"
+                list_item = QListWidgetItem(show_text)
+                if icon_path:
+                    list_item.setIcon(QIcon(icon_path))
+                self.requirements_list.addItem(list_item)
     def remove_selected_requirement(self):
-        # 支持多选移除
         for item in self.requirements_list.selectedItems():
             self.requirements_list.takeItem(self.requirements_list.row(item))
-    
+    def accept_material(self):
+        name = self.name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "警告", "请输入半成品名称")
+            return
+        output_quantity = self.quantity_spin.value()
+        requirements = []
+        for i in range(self.requirements_list.count()):
+            text = self.requirements_list.item(i).text()
+            if text.startswith('原材料:'):
+                n = text.split(':', 1)[1].split('x')[0].strip()
+                item = self.db_manager.get_base_material_by_name(n)
+                if not item:
+                    QMessageBox.warning(self, "警告", f"找不到原材料: {n}")
+                    return
+                quantity = 1.0
+                if 'x' in text:
+                    try:
+                        quantity = float(text.split('x')[-1].strip())
+                    except Exception:
+                        pass
+                requirements.append({'type': 'base', 'id': item['id'], 'name': n, 'quantity': quantity})
+        # 检查重名
+        if self.db_manager.get_material_by_name(name):
+            QMessageBox.warning(self, "警告", f"已存在半成品: {name}")
+            return
+        # 添加半成品
+        item_id = self.db_manager.add_material(name, output_quantity)
+        # 添加配方需求
+        for req in requirements:
+            base_material = self.db_manager.get_base_material_by_name(req['name'])
+            if base_material:
+                self.db_manager.add_recipe_requirement('material', item_id, 'base', base_material['id'], req['quantity'])
+        QMessageBox.information(self, "成功", f"已添加半成品: {name}")
+        self.accept()
+
+class RecipeEditDialog(QDialog):
+    def __init__(self, parent, db_manager, title="添加配方", name_label="配方名称", initial_name="", initial_quantity=1, edit_id=None, edit_type=None):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.setWindowTitle(title)
+        self.setMinimumSize(600, 500)
+        self.resize(700, 600)
+        self.name_label = name_label
+        self.edit_id = edit_id
+        self.edit_type = edit_type
+        self.init_ui(name_label, initial_name, initial_quantity)
+    def init_ui(self, name_label, initial_name, initial_quantity):
+        main_layout = QVBoxLayout(self)
+        # 基本信息区
+        basic_group = QGroupBox("基本信息")
+        basic_layout = QVBoxLayout(basic_group)
+        name_layout = QHBoxLayout()
+        name_layout.addWidget(QLabel(f"{name_label}:"))
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText(f"请输入{name_label}")
+        if initial_name:
+            self.name_edit.setText(initial_name)
+        name_layout.addWidget(self.name_edit)
+        basic_layout.addLayout(name_layout)
+        quantity_layout = QHBoxLayout()
+        quantity_layout.addWidget(QLabel("产出数量:"))
+        self.quantity_spin = QSpinBox()
+        self.quantity_spin.setRange(1, 999)
+        self.quantity_spin.setValue(initial_quantity)
+        quantity_layout.addWidget(self.quantity_spin)
+        basic_layout.addLayout(quantity_layout)
+        main_layout.addWidget(basic_group)
+        # 配方需求区
+        demand_group = QGroupBox("配方需求")
+        demand_layout = QHBoxLayout(demand_group)
+        # 左列：类型选择+搜索+可选项
+        left_layout = QVBoxLayout()
+        self.material_type_combo = QComboBox()
+        self.material_type_combo.addItems(["全部", "原材料", "半成品"])
+        self.material_type_combo.currentTextChanged.connect(self.update_option_list)
+        left_layout.addWidget(self.material_type_combo)
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("输入名称筛选...")
+        self.search_edit.textChanged.connect(self.update_option_list)
+        left_layout.addWidget(self.search_edit)
+        self.option_list = QListWidget()
+        self.option_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.option_list.itemDoubleClicked.connect(lambda item: self.add_selected_option())  # 支持双击添加
+        left_layout.addWidget(self.option_list)
+        # 中列：添加原材料/半成品/添加/移除
+        mid_layout = QVBoxLayout()
+        self.add_base_material_btn = QPushButton("添加原材料")
+        self.add_base_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
+        self.add_base_material_btn.clicked.connect(self.on_add_base_material_in_dialog)
+        mid_layout.addWidget(self.add_base_material_btn)
+        self.add_material_btn = QPushButton("添加半成品")
+        self.add_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
+        self.add_material_btn.clicked.connect(self.on_add_material_in_dialog)
+        mid_layout.addWidget(self.add_material_btn)
+        mid_layout.addStretch(2)
+        self.add_btn = QPushButton("→ 添加")
+        self.add_btn.clicked.connect(self.add_selected_option)
+        mid_layout.addWidget(self.add_btn, alignment=Qt.AlignHCenter)
+        self.remove_btn = QPushButton("← 移除")
+        self.remove_btn.clicked.connect(self.remove_selected_requirement)
+        mid_layout.addWidget(self.remove_btn, alignment=Qt.AlignHCenter)
+        mid_layout.addStretch(3)
+        # 右列：已添加需求
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(QLabel("已添加需求："))
+        self.requirements_list = QListWidget()
+        self.requirements_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.requirements_list.installEventFilter(self)  # 支持Delete键
+        right_layout.addWidget(self.requirements_list)
+        # 三列布局比例4:1:5
+        demand_layout.addLayout(left_layout, 4)
+        demand_layout.addLayout(mid_layout, 1)
+        demand_layout.addLayout(right_layout, 5)
+        main_layout.addWidget(demand_group)
+        # 按钮
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept_recipe)
+        button_box.rejected.connect(self.reject)
+        main_layout.addWidget(button_box)
+        # 初始化数据
+        self.update_option_list()
     def eventFilter(self, obj, event):
         # 支持Delete键删除
         if obj == self.requirements_list and event.type() == QEvent.KeyPress:
@@ -539,180 +742,160 @@ class RecipeAddDialog(QDialog):
                     self.requirements_list.takeItem(self.requirements_list.row(item))
                 return True
         return super().eventFilter(obj, event)
-    
-    def load_existing_data(self):
-        logger.debug(f"[RecipeAddDialog.load_existing_data] item_type={self.item_type}, item_id={self.item_id}")
-        try:
-            if self.item_type == 'material':
-                item_info = self.db_manager.get_material_by_id(self.item_id)
-                recipe_type = '半成品'
-                logger.debug(f"[RecipeAddDialog.load_existing_data] material info: {item_info}")
-            elif self.item_type == 'product':
-                item_info = self.db_manager.get_product_by_id(self.item_id)
-                recipe_type = '成品'
-                logger.debug(f"[RecipeAddDialog.load_existing_data] product info: {item_info}")
-            elif self.item_type == 'base':
-                item_info = self.db_manager.get_base_material_by_id(self.item_id)
-                recipe_type = '原材料'
-                logger.debug(f"[RecipeAddDialog.load_existing_data] base info: {item_info}")
+    def update_option_list(self):
+        type_text = self.material_type_combo.currentText() if hasattr(self, 'material_type_combo') else "全部"
+        search_text = self.search_edit.text().strip().lower() if hasattr(self, 'search_edit') else ""
+        items = []
+        if type_text in ("全部", "原材料"):
+            items += ["原材料: " + m['name'] for m in self.db_manager.get_base_materials()]
+        if type_text in ("全部", "半成品"):
+            items += ["半成品: " + m['name'] for m in self.db_manager.get_materials()]
+        if search_text:
+            items = [i for i in items if search_text in i.lower()]
+        self.option_list.clear()
+        for name in items:
+            item = QListWidgetItem(name)
+            if name.startswith("原材料:"):
+                real_name = name.split(":", 1)[1].strip()
+                icon_path = get_icon_path(real_name, 'base')
+            elif name.startswith("半成品:"):
+                real_name = name.split(":", 1)[1].strip()
+                icon_path = get_icon_path(real_name, 'material')
             else:
-                logger.error(f"[RecipeAddDialog.load_existing_data] 未知item_type: {self.item_type}")
+                real_name = name
+                icon_path = get_icon_path(real_name)
+            if icon_path:
+                item.setIcon(QIcon(icon_path))
+            self.option_list.addItem(item)
+    def on_add_base_material_in_dialog(self):
+        initial_name = self.search_edit.text().strip()
+        name, ok = QInputDialog.getText(self, "添加原材料", "请输入原材料名称：", text=initial_name)
+        name = name.strip()
+        if ok and name:
+            if self.db_manager.get_base_material_by_name(name):
+                QMessageBox.warning(self, "警告", f"已存在原材料: {name}")
                 return
-            logger.debug(f"[RecipeAddDialog.load_existing_data] item_info: {item_info}")
-            if not item_info:
-                logger.error("[RecipeAddDialog.load_existing_data] item_info is None")
-                self.show_message("配方不存在(数据库已无此ID)", "error")
-                self.parent().refresh_recipe_list() if self.parent() else None
-                return
-            try:
-                self.name_edit.setText(item_info['name'])
-                self.name_edit.setEnabled(False)
-                logger.debug(f"[RecipeAddDialog.load_existing_data] name_edit set: {item_info['name']}")
-            except Exception as e:
-                logger.exception(f"[RecipeAddDialog.load_existing_data] name_edit控件异常: {e}")
-            try:
-                logger.debug(f"[RecipeAddDialog.load_existing_data] findText: {recipe_type}")
-                type_index = self.type_combo.findText(recipe_type)
-                logger.debug(f"[RecipeAddDialog.load_existing_data] findText result: {type_index}")
-                if type_index >= 0:
-                    logger.debug(f"[RecipeAddDialog.load_existing_data] setCurrentIndex准备: {type_index}")
-                    try:
-                        self.type_combo.blockSignals(True)
-                        self.type_combo.setCurrentIndex(type_index)
-                    finally:
-                        self.type_combo.blockSignals(False)
-                    logger.debug(f"[RecipeAddDialog.load_existing_data] type_combo set: {recipe_type}")
-                else:
-                    logger.warning(f"[RecipeAddDialog.load_existing_data] type_combo未找到: {recipe_type}")
-            except Exception as e:
-                logger.exception(f"[RecipeAddDialog.load_existing_data] type_combo控件异常: {e}")
-            try:
-                if hasattr(self, 'quantity_spin') and 'output_quantity' in item_info:
-                    self.quantity_spin.setValue(item_info['output_quantity'])
-                    logger.debug(f"[RecipeAddDialog.load_existing_data] quantity_spin set: {item_info['output_quantity']}")
-            except Exception as e:
-                logger.exception(f"[RecipeAddDialog.load_existing_data] quantity_spin控件异常: {e}")
-            try:
-                self.requirements_list.clear()
-                logger.debug(f"[RecipeAddDialog.load_existing_data] requirements_list cleared")
-            except Exception as e:
-                logger.exception(f"[RecipeAddDialog.load_existing_data] requirements_list.clear异常: {e}")
-            if self.item_type in ('material', 'product'):
-                requirements = self.db_manager.get_recipe_requirements(self.item_type, self.item_id)
-                logger.debug(f"[RecipeAddDialog.load_existing_data] requirements: {requirements}")
-                for req in requirements:
-                    logger.debug(f"[RecipeAddDialog.load_existing_data] req: {req}")
-                    try:
-                        if req['ingredient_type'] == 'base':
-                            req_type = 'base'
-                            req_item = self.db_manager.get_base_material_by_id(req['ingredient_id'])
-                        elif req['ingredient_type'] == 'material':
-                            req_type = 'material'
-                            req_item = self.db_manager.get_material_by_id(req['ingredient_id'])
-                        else:
-                            logger.error(f"[RecipeAddDialog.load_existing_data] 未知ingredient_type: {req['ingredient_type']}")
-                            continue
-                        if not req_item:
-                            logger.warning(f"[RecipeAddDialog.load_existing_data] ingredient_id={req['ingredient_id']} 不存在，跳过")
-                            continue
-                        type_text = '原材料' if req_type == 'base' else '半成品'
-                        item_text = f"{type_text}: {req_item['name']} x{req['quantity']}"
-                        list_item = QListWidgetItem(item_text)
-                        list_item.setData(Qt.UserRole, {
-                            'type': req_type,
-                            'name': req_item['name'],
-                            'quantity': req['quantity']
-                        })
-                        icon_path = resource_path(os.path.join(ICON_DIR, f"{req_item['name']}.png"))
-                        if os.path.exists(icon_path):
-                            list_item.setIcon(QIcon(icon_path))
-                        self.requirements_list.addItem(list_item)
-                        logger.debug(f"[RecipeAddDialog.load_existing_data] requirements_list add: {item_text}")
-                    except Exception as e:
-                        logger.exception(f"[RecipeAddDialog.load_existing_data] requirements_list添加异常: {e}")
-        except Exception as e:
-            logger.exception(f"[RecipeAddDialog.load_existing_data] 加载配方数据失败: {e}")
-            QMessageBox.critical(self, "错误", f"加载配方数据失败: {str(e)}")
-    
-    def accept_recipe(self):
-        try:
-            name = self.name_edit.text().strip()
-            if not name:
-                QMessageBox.warning(self, "警告", "请输入配方名称")
-                return
-            recipe_type = self.type_combo.currentText()
-            output_quantity = self.quantity_spin.value() if hasattr(self, 'quantity_spin') else 1
-            type_map = {'成品': 'product', '半成品': 'material', '原材料': 'base'}
-            item_type = type_map.get(recipe_type, 'material')
-            # 检查重名
-            if not self.edit_mode:
-                if item_type == 'material':
-                    existing_item = self.db_manager.get_material_by_name(name)
-                elif item_type == 'product':
-                    existing_item = self.db_manager.get_product_by_name(name)
-                elif item_type == 'base':
-                    existing_item = self.db_manager.get_base_material_by_name(name)
-                else:
-                    existing_item = None
-                if existing_item:
-                    QMessageBox.warning(self, "警告", f"已存在同名的{recipe_type} '{name}'，请使用不同的名称")
-                    return
-            # 解析右侧需求
-            requirements = []
+            self.db_manager.add_base_material(name)
+            QMessageBox.information(self, "成功", f"已添加原材料: {name}")
+            self.update_option_list()
+    def on_add_material_in_dialog(self):
+        initial_name = self.search_edit.text().strip()
+        dialog = RecipeEditDialog(self, self.db_manager, title="添加半成品", name_label="半成品名称", initial_name=initial_name)
+        if dialog.exec() == QDialog.Accepted:
+            self.update_option_list()
+    def add_selected_option(self):
+        for item in self.option_list.selectedItems():
+            name = item.text()
+            exists = False
             for i in range(self.requirements_list.count()):
-                text = self.requirements_list.item(i).text()
-                # 例：'半成品: 白钢板 x1.0' 或 '原材料: 特制树枝 x1.0'
-                if text.startswith('半成品:'):
-                    n = text.split(':', 1)[1].split('x')[0].strip()
-                    item = self.db_manager.get_material_by_name(n)
-                    if not item:
-                        QMessageBox.warning(self, "警告", f"找不到半成品: {n}")
-                        return
-                    quantity = 1.0
-                    if 'x' in text:
-                        try:
-                            quantity = float(text.split('x')[-1].strip())
-                        except Exception:
-                            pass
-                    requirements.append({'type': 'material', 'id': item['id'], 'name': n, 'quantity': quantity})
-                elif text.startswith('原材料:'):
-                    n = text.split(':', 1)[1].split('x')[0].strip()
-                    item = self.db_manager.get_base_material_by_name(n)
-                    if not item:
-                        QMessageBox.warning(self, "警告", f"找不到原材料: {n}")
-                        return
-                    quantity = 1.0
-                    if 'x' in text:
-                        try:
-                            quantity = float(text.split('x')[-1].strip())
-                        except Exception:
-                            pass
-                    requirements.append({'type': 'base', 'id': item['id'], 'name': n, 'quantity': quantity})
-            # ...后续保存逻辑保持不变...
-            # 这里可以继续调用数据库保存等
-            # self.db_manager.add_xxx(...)
-            self.accept()
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"编辑配方失败: {str(e)}")
-    
-    def on_req_name_text_changed(self, text):
-        text = text.strip().lower()
-        self.req_name_combo.blockSignals(True)
-        self.req_name_combo.clear()
-        req_type = self.req_type_combo.currentText()
-        if req_type == "原材料":
-            items = [m['name'] for m in self.db_manager.get_base_materials() if text in m['name'].lower()]
+                # 只比对名称部分（不含数量）
+                base_name = self.requirements_list.item(i).text().split('x')[0].strip()
+                if base_name == name:
+                    exists = True
+                    break
+            if not exists:
+                # 弹出数量输入框
+                quantity, ok = QInputDialog.getInt(self, "请输入数量", f"为 {name} 输入数量：", 1, 1, 9999, 1)
+                if not ok:
+                            continue
+                # 设置图标
+                if name.startswith("原材料:"):
+                    real_name = name.split(":", 1)[1].strip()
+                    icon_path = get_icon_path(real_name, 'base')
+                elif name.startswith("半成品:"):
+                    real_name = name.split(":", 1)[1].strip()
+                    icon_path = get_icon_path(real_name, 'material')
+                else:
+                    real_name = name
+                    icon_path = get_icon_path(real_name)
+                show_text = f"{name} x{quantity}"
+                list_item = QListWidgetItem(show_text)
+                if icon_path:
+                    list_item.setIcon(QIcon(icon_path))
+                    self.requirements_list.addItem(list_item)
+    def remove_selected_requirement(self):
+        for item in self.requirements_list.selectedItems():
+            self.requirements_list.takeItem(self.requirements_list.row(item))
+    def accept_recipe(self):
+        name = self.name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "警告", f"请输入{self.name_label}")
+            return
+        output_quantity = self.quantity_spin.value()
+        requirements = []
+        for i in range(self.requirements_list.count()):
+            text = self.requirements_list.item(i).text()
+            if text.startswith('半成品:'):
+                n = text.split(':', 1)[1].split('x')[0].strip()
+                item = self.db_manager.get_material_by_name(n)
+                if not item:
+                    QMessageBox.warning(self, "警告", f"找不到半成品: {n}")
+                    return
+                quantity = 1.0
+                if 'x' in text:
+                    try:
+                        quantity = float(text.split('x')[-1].strip())
+                    except Exception:
+                        pass
+                requirements.append({'type': 'material', 'id': item['id'], 'name': n, 'quantity': quantity})
+            elif text.startswith('原材料:'):
+                n = text.split(':', 1)[1].split('x')[0].strip()
+                item = self.db_manager.get_base_material_by_name(n)
+                if not item:
+                    QMessageBox.warning(self, "警告", f"找不到原材料: {n}")
+                    return
+                quantity = 1.0
+                if 'x' in text:
+                    try:
+                        quantity = float(text.split('x')[-1].strip())
+                    except Exception:
+                        pass
+                requirements.append({'type': 'base', 'id': item['id'], 'name': n, 'quantity': quantity})
+        # 检查重名（仅新建时）
+        if not self.edit_id:
+            if self.name_label == "配方名称" and self.db_manager.get_product_by_name(name):
+                QMessageBox.warning(self, "警告", f"已存在成品: {name}")
+                return
+            if self.name_label == "半成品名称" and self.db_manager.get_material_by_name(name):
+                QMessageBox.warning(self, "警告", f"已存在半成品: {name}")
+                return
+        # 编辑模式：覆盖原有
+        if self.edit_id:
+            if self.name_label == "配方名称":
+                self.db_manager.update_product(self.edit_id, name, output_quantity)
+                item_type = 'product'
+            else:
+                self.db_manager.update_material(self.edit_id, name, output_quantity)
+                item_type = 'material'
+            # 先删除原有需求
+            self.db_manager.delete_recipe_requirements(item_type, self.edit_id)
+            item_id = self.edit_id
         else:
-            items = [m['name'] for m in self.db_manager.get_materials() if text in m['name'].lower()]
-        self.req_name_combo.addItems(items)
-        self.req_name_combo.blockSignals(False)
-        if items:
-            self.req_name_combo.showPopup()
-    
+            # 新建
+            if self.name_label == "配方名称":
+                item_id = self.db_manager.add_product(name, output_quantity)
+                item_type = 'product'
+            else:
+                item_id = self.db_manager.add_material(name, output_quantity)
+                item_type = 'material'
+        # 添加配方需求
+        for req in requirements:
+            req_type = req['type']
+            req_name = req['name']
+            req_quantity = req['quantity']
+            if req_type == 'base':
+                material = self.db_manager.get_base_material_by_name(req_name)
+                if material:
+                    self.db_manager.add_recipe_requirement(item_type, item_id, 'base', material['id'], req_quantity)
+            elif req_type == 'material':
+                material = self.db_manager.get_material_by_name(req_name)
+                if material:
+                    self.db_manager.add_recipe_requirement(item_type, item_id, 'material', material['id'], req_quantity)
+        QMessageBox.information(self, "成功", f"已保存{self.name_label[:-2]}: {name}")
+        self.accept()
 
 class DataMigrator:
     """数据迁移器"""
-    
     def __init__(self, db_manager):
         self.db_manager = db_manager
     
@@ -748,7 +931,13 @@ class FFXIVCalculatorWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         # 设置窗口图标
-        self.setWindowIcon(QIcon(resource_path(os.path.join(ICON_DIR, 'logo_use.png'))))
+        self.setWindowIcon(QIcon(resource_path(os.path.join('icon', 'logo.png'))))
+        # 设置应用图标（Windows任务栏）
+        import ctypes
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ffxiv.formula.calculator")
+        except Exception:
+            pass
         
         # 设置窗口标题和标志
         self.setWindowTitle("FFXIV 配方计算器")
@@ -906,11 +1095,11 @@ class FFXIVCalculatorWindow(QMainWindow):
                     child.hide()
                     child.setVisible(False)
         except Exception as e:
-            logger.debug(f"隐藏标题栏时出错: {e}")
+            debug_log(f"隐藏标题栏时出错: {e}")
         
         # 确保 FluentWindow 正确初始化
         if hasattr(self.fluent_widget, 'navigationInterface'):
-            # 设置导航栏宽度
+        # 设置导航栏宽度
             self.fluent_widget.navigationInterface.setExpandWidth(200)  # 设置展开宽度为200px
             # 隐藏返回按钮（左箭头）
             try:
@@ -946,10 +1135,10 @@ class FFXIVCalculatorWindow(QMainWindow):
                         self.fluent_widget.navigationInterface.toggleButton.hide()
                         self.fluent_widget.navigationInterface.toggleButton.setVisible(False)
                 except Exception as e:
-                    logger.debug(f"隐藏汉堡菜单时出错: {e}")
+                    debug_log(f"隐藏汉堡菜单时出错: {e}")
                     
             except Exception as e:
-                logger.debug(f"隐藏返回按钮时出错: {e}")
+                debug_log(f"隐藏返回按钮时出错: {e}")
         
         # 创建各个页面
         self.create_calculator_page()
@@ -958,11 +1147,11 @@ class FFXIVCalculatorWindow(QMainWindow):
         # 添加导航项
         if hasattr(self.fluent_widget, 'addSubInterface'):
             self.fluent_widget.addSubInterface(
-                self.calculator_page, FluentIcon.COMMAND_PROMPT, "计算器"
-            )
+            self.calculator_page, FluentIcon.COMMAND_PROMPT, "计算器"
+        )
             self.fluent_widget.addSubInterface(
-                self.recipe_page, FluentIcon.BOOK_SHELF, "配方管理"
-            )
+            self.recipe_page, FluentIcon.BOOK_SHELF, "配方管理"
+        )
         
         # 连接页面切换事件
         if hasattr(self.fluent_widget, 'stackedWidget'):
@@ -1026,8 +1215,8 @@ class FFXIVCalculatorWindow(QMainWindow):
         else:
             widget = QGroupBox("配方选择")
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(5, 5, 5, 5)  # 设置很小的边距
-        layout.setSpacing(5)  # 设置很小的间距
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
         # 搜索框
         search_layout = QHBoxLayout()
         search_layout.addWidget(QLabel("搜索:"))
@@ -1050,6 +1239,7 @@ class FFXIVCalculatorWindow(QMainWindow):
         self.type_combo.currentTextChanged.connect(self.refresh_item_list)
         type_layout.addWidget(self.type_combo)
         layout.addLayout(type_layout)
+
         # 物品表格
         self.item_table = QListWidget()
         self.item_table.setViewMode(QListView.IconMode)
@@ -1128,13 +1318,15 @@ class FFXIVCalculatorWindow(QMainWindow):
             # 查数据库获取id
             if type_text == "成品":
                 db_item = self.db_manager.get_product_by_name(name)
+                item_type = 'product'
             else:
                 db_item = self.db_manager.get_material_by_name(name)
+                item_type = 'material'
             item_id = db_item['id'] if db_item and 'id' in db_item else None
             output_quantity = db_item['output_quantity'] if db_item and 'output_quantity' in db_item else 1
             row_pos = self.selected_table.rowCount()
             # 名称列加图标，禁止编辑
-            icon_item = get_item_icon_item(name, icon_size=48)
+            icon_item = get_item_icon_item(name, item_type=item_type, icon_size=48)
             icon_item.setData(Qt.UserRole, item_id)
             icon_item.setFlags(icon_item.flags() & ~Qt.ItemIsEditable)
             self.selected_table.insertRow(row_pos)
@@ -1158,6 +1350,12 @@ class FFXIVCalculatorWindow(QMainWindow):
         name = item.text()
         # 复用add_selected_item的核心逻辑，但只加一个
         type_text = self.type_combo.currentText()
+        if type_text == "成品":
+            item_type = 'product'
+            db_item = self.db_manager.get_product_by_name(name)
+        else:
+            item_type = 'material'
+            db_item = self.db_manager.get_material_by_name(name)
         already = False
         for i in range(self.selected_table.rowCount()):
             if self.selected_table.item(i, 0) and self.selected_table.item(i, 0).text() == name:
@@ -1165,15 +1363,11 @@ class FFXIVCalculatorWindow(QMainWindow):
                 break
         if already:
             return
-        if type_text == "成品":
-            db_item = self.db_manager.get_product_by_name(name)
-        else:
-            db_item = self.db_manager.get_material_by_name(name)
         item_id = db_item['id'] if db_item and 'id' in db_item else None
         output_quantity = db_item['output_quantity'] if db_item and 'output_quantity' in db_item else 1
         row_pos = self.selected_table.rowCount()
         # 名称列加图标，禁止编辑
-        icon_item = get_item_icon_item(name, icon_size=48)
+        icon_item = get_item_icon_item(name, item_type=item_type, icon_size=48)
         icon_item.setData(Qt.UserRole, item_id)
         icon_item.setFlags(icon_item.flags() & ~Qt.ItemIsEditable)
         self.selected_table.insertRow(row_pos)
@@ -1303,68 +1497,56 @@ class FFXIVCalculatorWindow(QMainWindow):
     def create_recipe_menu_widget(self):
         """创建配方操作菜单组件"""
         if FLUENT_AVAILABLE:
-            # 使用普通的CardWidget代替HeaderCardWidget
             widget = CardWidget()
-            # 添加标题
             title_label = QLabel("配方操作")
             title_label.setStyleSheet("font-weight: bold; font-size: 16px;")
-            
-            # 创建内容布局
             content_layout = QVBoxLayout(widget)
-            content_layout.setContentsMargins(10, 10, 10, 5)  # 减少边距
-            content_layout.setSpacing(5)  # 减少间距
+            content_layout.setContentsMargins(10, 10, 10, 5)
+            content_layout.setSpacing(5)
             content_layout.addWidget(title_label)
-            
-            # 创建按钮布局
             button_widget = QWidget()
             layout = QHBoxLayout(button_widget)
-            layout.setContentsMargins(0, 5, 0, 0)  # 减少上边距
-            layout.setSpacing(10)  # 设置按钮之间的间距
+            layout.setContentsMargins(0, 5, 0, 0)
+            layout.setSpacing(10)
             content_layout.addWidget(button_widget)
         else:
             widget = QGroupBox("配方操作")
             layout = QHBoxLayout(widget)
-            layout.setContentsMargins(10, 10, 10, 10)  # 减少边距
-            layout.setSpacing(10)  # 设置按钮之间的间距
-        
+            layout.setContentsMargins(10, 10, 10, 10)
+            layout.setSpacing(10)
         # 添加配方按钮
         if FLUENT_AVAILABLE:
             self.add_recipe_btn = PrimaryPushButton("添加配方")
         else:
             self.add_recipe_btn = QPushButton("添加配方")
         self.add_recipe_btn.clicked.connect(self.add_new_recipe)
-        self.add_recipe_btn.setFixedWidth(100)  # 设置固定宽度
+        self.add_recipe_btn.setFixedWidth(100)
         layout.addWidget(self.add_recipe_btn)
-        
         # 删除配方按钮
         if FLUENT_AVAILABLE:
             self.delete_recipe_btn = PushButton("删除配方")
         else:
             self.delete_recipe_btn = QPushButton("删除配方")
         self.delete_recipe_btn.clicked.connect(self.on_delete_recipe_clicked)
-        self.delete_recipe_btn.setFixedWidth(100)  # 设置固定宽度
+        self.delete_recipe_btn.setFixedWidth(100)
         layout.addWidget(self.delete_recipe_btn)
-        
         # 导入配方按钮
         if FLUENT_AVAILABLE:
             self.import_recipe_btn = PushButton("导入配方")
         else:
             self.import_recipe_btn = QPushButton("导入配方")
         self.import_recipe_btn.clicked.connect(self.import_csv_data)
-        self.import_recipe_btn.setFixedWidth(100)  # 设置固定宽度
+        self.import_recipe_btn.setFixedWidth(100)
         layout.addWidget(self.import_recipe_btn)
-        
         # 导出配方按钮
         if FLUENT_AVAILABLE:
             self.export_recipe_btn = PushButton("导出配方")
         else:
             self.export_recipe_btn = QPushButton("导出配方")
         self.export_recipe_btn.clicked.connect(self.on_export_recipe_clicked)
-        self.export_recipe_btn.setFixedWidth(100)  # 设置固定宽度
+        self.export_recipe_btn.setFixedWidth(100)
         layout.addWidget(self.export_recipe_btn)
-        
         layout.addStretch()
-        
         return widget
     
     def create_recipe_list_widget(self):
@@ -1448,41 +1630,31 @@ class FFXIVCalculatorWindow(QMainWindow):
             widget = SimpleCardWidget()
         else:
             widget = QGroupBox("配方详情")
-        
         layout = QVBoxLayout(widget)
-        
-        # 配方详情显示和编辑按钮的水平布局
         detail_layout = QHBoxLayout()
-        
-        # 配方详情显示
         self.recipe_detail_label = QLabel("请选择一个配方查看详情")
         self.recipe_detail_label.setStyleSheet("font-weight: bold; font-size: 14px; margin: 10px;")
         detail_layout.addWidget(self.recipe_detail_label)
-        
-        # 编辑按钮
         if FLUENT_AVAILABLE:
             self.edit_recipe_button = PushButton("编辑配方")
         else:
             self.edit_recipe_button = QPushButton("编辑配方")
-        self.edit_recipe_button.setEnabled(False)  # 初始状态禁用
+        self.edit_recipe_button.setEnabled(False)
         self.edit_recipe_button.clicked.connect(self.edit_selected_recipe)
         detail_layout.addWidget(self.edit_recipe_button)
-        
         layout.addLayout(detail_layout)
-        
-        # 配方分解树
         layout.addWidget(QLabel("配方分解:"))
         if FLUENT_AVAILABLE:
             self.recipe_detail_tree = TreeWidget()
         else:
             self.recipe_detail_tree = QTreeWidget()
-        
-        self.recipe_detail_tree.setHeaderLabels(["物品名称", "数量", "类型"])
-        self.recipe_detail_tree.setColumnWidth(0, 200)
-        self.recipe_detail_tree.setColumnWidth(1, 80)
-        self.recipe_detail_tree.setColumnWidth(2, 80)
+        self.recipe_detail_tree.setRootIsDecorated(True)
+        self.recipe_detail_tree.setIndentation(20)
+        # 增强层级竖线
+        self.recipe_detail_tree.setStyleSheet("""
+QTreeView::branch { background: transparent; border-left: 3px solid #444; }
+""")
         layout.addWidget(self.recipe_detail_tree)
-        
         return widget
     
 
@@ -1518,28 +1690,20 @@ class FFXIVCalculatorWindow(QMainWindow):
             return
         current_type = self.type_combo.currentText()
         search_text = self.search_edit.text().strip()
-        
         if current_type == "成品":
             items = self.db_manager.get_products()
+            item_type = 'product'
         else:
             items = self.db_manager.get_materials()
-        
+            item_type = 'material'
         # 过滤搜索结果
         if search_text:
             items = [item for item in items if search_text.lower() in item['name'].lower()]
-        
         # 更新表格
         self.item_table.clear()
-        icon_size = self.item_table.iconSize().width()  # 仍然保持和 setIconSize 一致
+        icon_size = self.item_table.iconSize().width()
         for item in items:
-            icon_item = QListWidgetItem()
-            icon_item.setText(item['name'])
-            icon_path = resource_path(os.path.join(ICON_DIR, f"{item['name']}.png"))
-            if os.path.exists(icon_path):
-                pixmap = QPixmap(icon_path)
-                if not pixmap.isNull():
-                    pixmap = pixmap.scaled(icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                    icon_item.setIcon(QIcon(pixmap))
+            icon_item = get_item_icon_item_for_list(item['name'], item_type=item_type, icon_size=icon_size)
             self.item_table.addItem(icon_item)
     
     def refresh_recipe_list(self):
@@ -1551,12 +1715,12 @@ class FFXIVCalculatorWindow(QMainWindow):
             # 先加成品
             if filter_type in ("全部", "成品"):
                 products = self.db_manager.get_products()
-                logger.debug(f"[refresh_recipe_list] products: {products}")
+                debug_log(f"[refresh_recipe_list] products: {products}")
                 for product in products:
                     try:
                         pid = int(product['id'])
                         real = self.db_manager.get_product_by_id(pid)
-                        logger.debug(f"[refresh_recipe_list] product id={product['id']} type={type(product['id'])} real={real}")
+                        debug_log(f"[refresh_recipe_list] product id={product['id']} type={type(product['id'])} real={real}")
                         if real:
                             all_items.append({
                                 'id': pid,
@@ -1566,16 +1730,16 @@ class FFXIVCalculatorWindow(QMainWindow):
                                 'item_type': 'product'
                             })
                     except Exception as e:
-                        logger.warning(f"[refresh_recipe_list] product id异常: {product['id']}, {e}")
+                        debug_log(f"[refresh_recipe_list] product id异常: {product['id']}, {e}")
             # 再加半成品
             if filter_type in ("全部", "半成品"):
                 materials = self.db_manager.get_materials()
-                logger.debug(f"[refresh_recipe_list] materials: {materials}")
+                debug_log(f"[refresh_recipe_list] materials: {materials}")
                 for material in materials:
                     try:
                         mid = int(material['id'])
                         real = self.db_manager.get_material_by_id(mid)
-                        logger.debug(f"[refresh_recipe_list] material id={material['id']} type={type(material['id'])} real={real}")
+                        debug_log(f"[refresh_recipe_list] material id={material['id']} type={type(material['id'])} real={real}")
                         if real:
                             all_items.append({
                                 'id': mid,
@@ -1585,16 +1749,16 @@ class FFXIVCalculatorWindow(QMainWindow):
                                 'item_type': 'material'
                             })
                     except Exception as e:
-                        logger.warning(f"[refresh_recipe_list] material id异常: {material['id']}, {e}")
+                        debug_log(f"[refresh_recipe_list] material id异常: {material['id']}, {e}")
             # 最后加原材料
             if filter_type in ("全部", "原材料"):
                 base_materials = self.db_manager.get_base_materials()
-                logger.debug(f"[refresh_recipe_list] base_materials: {base_materials}")
+                debug_log(f"[refresh_recipe_list] base_materials: {base_materials}")
                 for base in base_materials:
                     try:
                         bid = int(base['id'])
                         real = self.db_manager.get_base_material_by_id(bid)
-                        logger.debug(f"[refresh_recipe_list] base id={base['id']} type={type(base['id'])} real={real}")
+                        debug_log(f"[refresh_recipe_list] base id={base['id']} type={type(base['id'])} real={real}")
                         if real:
                             all_items.append({
                                 'id': bid,
@@ -1604,15 +1768,15 @@ class FFXIVCalculatorWindow(QMainWindow):
                                 'item_type': 'base'
                             })
                     except Exception as e:
-                        logger.warning(f"[refresh_recipe_list] base id异常: {base['id']}, {e}")
+                        debug_log(f"[refresh_recipe_list] base id异常: {base['id']}, {e}")
             self.recipe_list_table.setRowCount(len(all_items))
             self.recipe_list_table.setHorizontalHeaderItem(0, QTableWidgetItem(""))
             icon_size = self.recipe_list_table.verticalHeader().defaultSectionSize()
             for row, item in enumerate(all_items):
                 index_item = QTableWidgetItem(str(row + 1))
                 index_item.setTextAlignment(Qt.AlignCenter)
-                self.recipe_list_table.setItem(row, 0, index_item)
-                icon_item = get_item_icon_item(item['name'], icon_size=icon_size)
+                # 传入item['item_type']
+                icon_item = get_item_icon_item(item['name'], item_type=item.get('item_type'), icon_size=icon_size)
                 icon_item.setData(Qt.UserRole, {'type': item['item_type'], 'id': item['id']})
                 self.recipe_list_table.setItem(row, 1, icon_item)
                 self.recipe_list_table.setRowHeight(row, icon_size)
@@ -1631,53 +1795,77 @@ class FFXIVCalculatorWindow(QMainWindow):
                 self.edit_recipe_button.setEnabled(False)
             self.current_selected_recipe = None
         except Exception as e:
-            logger.exception(f"[refresh_recipe_list] 刷新配方列表失败: {e}")
+            debug_log(f"[refresh_recipe_list] 刷新配方列表失败: {e}")
             self.show_message(f"刷新配方列表失败: {str(e)}", "error")
 
     def edit_selected_recipe(self):
-        """编辑选中的配方或原材料"""
-        logger.debug(f"[edit_selected_recipe] current_selected_recipe: {getattr(self, 'current_selected_recipe', None)}")
-        if not hasattr(self, 'current_selected_recipe') or not self.current_selected_recipe:
-            self.show_message("请先选择一个配方", "warning")
-            return
         try:
-            item_type = self.current_selected_recipe['type']
-            item_id = self.current_selected_recipe['id']
-            try:
-                item_id = int(item_id)
-            except Exception as e:
-                logger.warning(f"[edit_selected_recipe] item_id转int失败: {item_id}, {e}")
-            logger.debug(f"[edit_selected_recipe] item_type={item_type}, item_id={item_id}")
+            item = self.recipe_list_table.currentItem()
+            if not item:
+                self.show_message("请先选中要编辑的配方", "warning")
+                return
+            row = item.row()
+            name_item = self.recipe_list_table.item(row, 1)
+            if not name_item:
+                self.show_message("无法获取配方信息", "error")
+                return
+            item_data = name_item.data(Qt.UserRole)
+            if not item_data:
+                self.show_message("无法获取配方信息", "error")
+                return
+            item_type = item_data['type']
+            item_id = item_data['id']
+            # 获取配方信息
             if item_type == 'material':
-                item_info = self.db_manager.get_material_by_id(item_id)
-                logger.debug(f"[edit_selected_recipe] material info: {item_info}")
+                info = self.db_manager.get_material_by_id(item_id)
+                name_label = "半成品名称"
+                title = "编辑半成品"
             elif item_type == 'product':
-                item_info = self.db_manager.get_product_by_id(item_id)
-                logger.debug(f"[edit_selected_recipe] product info: {item_info}")
-            elif item_type == 'base':
-                base = self.db_manager.get_base_material_by_id(item_id)
-                logger.debug(f"[edit_selected_recipe] base info: {base}")
-                if not base:
-                    self.show_message(f"原材料不存在(数据库已无此ID: {item_id})", "error")
-                    self.refresh_recipe_list()
-                    return
-                name, ok = QInputDialog.getText(self, "编辑原材料", "原材料名称：", QLineEdit.Normal, base['name'])
-                if ok and name.strip():
-                    self.db_manager.update_base_material(item_id, name.strip())
-                    self.refresh_data_models()
-                    self.refresh_recipe_list()
-                    self.refresh_item_list()
-                    self.show_message("原材料编辑成功", "success")
-                return
+                info = self.db_manager.get_product_by_id(item_id)
+                name_label = "配方名称"
+                title = "编辑配方"
             else:
-                self.show_message("不支持的类型", "error")
+                self.show_message("暂不支持编辑该类型", "warning")
                 return
-            if not item_info:
-                self.show_message(f"配方不存在(数据库已无此ID: {item_id})", "error")
-                self.refresh_recipe_list()
+            if not info:
+                self.show_message("配方不存在", "error")
                 return
-            logger.debug(f"[edit_selected_recipe] open dialog for type={item_type}, id={item_id}")
-            dialog = RecipeAddDialog(self, self.db_manager, edit_mode=True, item_type=item_type, item_id=item_id)
+            initial_name = info['name']
+            initial_quantity = info.get('output_quantity', 1)
+            # 获取需求列表
+            requirements = self.db_manager.get_recipe_requirements(item_type, item_id)
+            initial_requirements = []
+            for req in requirements:
+                if req['ingredient_type'] == 'base':
+                    req_item = self.db_manager.get_base_material_by_id(req['ingredient_id'])
+                    type_text = '原材料'
+                elif req['ingredient_type'] == 'material':
+                    req_item = self.db_manager.get_material_by_id(req['ingredient_id'])
+                    type_text = '半成品'
+                else:
+                    continue
+                if not req_item:
+                    continue
+                show_text = f"{type_text}: {req_item['name']} x{req['quantity']}"
+                initial_requirements.append(show_text)
+            # 弹窗
+            dialog = RecipeEditDialog(self, self.db_manager, title=title, name_label=name_label, initial_name=initial_name, initial_quantity=initial_quantity, edit_id=item_id, edit_type=item_type)
+            # 填充需求列表
+            dialog.requirements_list.clear()
+            for text in initial_requirements:
+                if text.startswith("原材料:"):
+                    real_name = text.split(":", 1)[1].split('x')[0].strip()
+                    icon_path = get_icon_path(real_name, 'base')
+                elif text.startswith("半成品:"):
+                    real_name = text.split(":", 1)[1].split('x')[0].strip()
+                    icon_path = get_icon_path(real_name, 'material')
+                else:
+                    real_name = text
+                    icon_path = get_icon_path(real_name)
+                list_item = QListWidgetItem(text)
+                if icon_path:
+                    list_item.setIcon(QIcon(icon_path))
+                dialog.requirements_list.addItem(list_item)
             if dialog.exec() == QDialog.Accepted:
                 self.refresh_data_models()
                 self.refresh_recipe_list()
@@ -1685,7 +1873,6 @@ class FFXIVCalculatorWindow(QMainWindow):
                 self.on_recipe_selected(self.recipe_list_table.currentItem())
                 self.show_message("配方编辑成功", "success")
         except Exception as e:
-            logger.exception(f"[edit_selected_recipe] 编辑配方失败: {e}")
             self.show_message(f"编辑配方失败: {str(e)}", "error")
     
     def on_recipe_selected(self, item):
@@ -1738,7 +1925,7 @@ class FFXIVCalculatorWindow(QMainWindow):
     
     def add_new_recipe(self):
         try:
-            dialog = RecipeAddDialog(self, self.db_manager)
+            dialog = RecipeEditDialog(self, self.db_manager)
             if dialog.exec() == QDialog.Accepted:
                 self.refresh_data_models()
                 self.refresh_recipe_list()
@@ -1774,73 +1961,29 @@ class FFXIVCalculatorWindow(QMainWindow):
             self.show_message(f"删除配方失败: {str(e)}", "error")
     
     def on_delete_recipe_clicked(self):
-        """删除配方按钮点击事件"""
-        # 获取选中的行
-        selected_rows = []
-        for row in range(self.recipe_list_table.rowCount()):
-            if self.recipe_list_table.item(row, 0) and self.recipe_list_table.item(row, 0).isSelected():
-                selected_rows.append(row)
-        
-        # 如果没有选中行，检查当前行
+        selected_rows = set()
+        for idx in self.recipe_list_table.selectedIndexes():
+            selected_rows.add(idx.row())
         if not selected_rows:
-            current_row = self.recipe_list_table.currentRow()
-            if current_row >= 0:
-                selected_rows = [current_row]
-        
-        if not selected_rows:
-            self.show_message("请选择要删除的配方", "warning")
+            QMessageBox.information(self, "提示", "请先选中要删除的配方")
             return
-        
-        # 收集要删除的配方信息
-        recipes_to_delete = []
-        for row in selected_rows:
+        # 按行号倒序删除，避免索引错乱
+        for row in sorted(selected_rows, reverse=True):
             name_item = self.recipe_list_table.item(row, 1)
-            type_item = self.recipe_list_table.item(row, 2)
-            if name_item and type_item:
-                recipe_name = name_item.text()
-                recipe_type = "material" if type_item.text() == "半成品" else "product"
-                recipes_to_delete.append((recipe_name, recipe_type))
-        
-        if not recipes_to_delete:
-            self.show_message("无法获取配方信息", "error")
-            return
-        
-        # 二次确认删除
-        recipe_names = [name for name, _ in recipes_to_delete]
-        if len(recipes_to_delete) == 1:
-            message = f"确定要删除配方 '{recipe_names[0]}' 吗？"
-        else:
-            message = f"确定要删除以下 {len(recipes_to_delete)} 个配方吗？\n\n{', '.join(recipe_names[:5])}{'...' if len(recipe_names) > 5 else ''}\n\n此操作不可撤销。"
-        
-        reply = QMessageBox.question(
-            self, "确认删除", message,
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
+            if not name_item:
+                continue
+            item_data = name_item.data(Qt.UserRole)
+            if not item_data:
+                continue
+            item_type = item_data['type']
+            item_id = item_data['id']
             try:
-                deleted_count = 0
-                for recipe_name, recipe_type in recipes_to_delete:
-                    # 获取配方ID
-                    if recipe_type == "material":
-                        item = self.db_manager.get_material_by_name(recipe_name)
-                    else:
-                        item = self.db_manager.get_product_by_name(recipe_name)
-                    
-                    if item:
-                        if recipe_type == "material":
-                            self.db_manager.delete_material(item['id'])
-                        else:
-                            self.db_manager.delete_product(item['id'])
-                        deleted_count += 1
-                
-                self.show_message(f"成功删除 {deleted_count} 个配方", "success")
+                self.delete_recipe(item_type, item_id)
+            except Exception as e:
+                debug_log(f"删除配方失败: {e}")
                 self.refresh_recipe_list()
                 self.refresh_item_list()
-                
-            except Exception as e:
-                self.show_message(f"删除配方失败: {str(e)}", "error")
+        QMessageBox.information(self, "成功", f"成功删除 {len(selected_rows)} 个配方")
     
 
     
@@ -1878,14 +2021,15 @@ class FFXIVCalculatorWindow(QMainWindow):
 
     def on_calculation_finished(self, result: dict):
         from loguru import logger
-        logger.debug(f"[on_calculation_finished] result={result}")
+        debug_log(f"[on_calculation_finished] result={result}")
         self.calculate_button.setEnabled(True)
         self.calculate_button.setText("计算材料需求")
         requirements = result.get('requirements', [])
         self.result_table.setRowCount(len(requirements))
         icon_size = self.result_table.verticalHeader().defaultSectionSize()
         for i, req in enumerate(requirements):
-            icon_item = get_item_icon_item(req['name'], icon_size=icon_size)
+            # 传入req['type']
+            icon_item = get_item_icon_item(req['name'], item_type=req.get('type', 'base'), icon_size=icon_size)
             self.result_table.setItem(i, 0, icon_item)
             self.result_table.setRowHeight(i, icon_size)
             self.result_table.setItem(i, 1, QTableWidgetItem(str(int(float(req['quantity'])))))
@@ -1904,18 +2048,18 @@ class FFXIVCalculatorWindow(QMainWindow):
                 item_id = name_item.data(Qt.UserRole)
                 if name and item_id is not None:
                     items.append({'id': item_id, 'name': name, 'type': type_text, 'quantity': quantity})
-        logger.debug(f"[on_calculation_finished] items(from table)={items}")
+        debug_log(f"[on_calculation_finished] items(from table)={items}")
         self.recipe_tree.clear()
         tree_count = 0
         for item in items:
-            logger.debug(f"[on_calculation_finished] get_recipe_tree: type={item['type']} id={item['id']} quantity={item['quantity']}")
+            debug_log(f"[on_calculation_finished] get_recipe_tree: type={item['type']} id={item['id']} quantity={item['quantity']}")
             tree_data = self.calculator.get_recipe_tree(item['type'], item['id'], item['quantity'])
-            logger.debug(f"[on_calculation_finished] tree_data={tree_data}")
+            debug_log(f"[on_calculation_finished] tree_data={tree_data}")
             if tree_data:
                 root_item = self.create_tree_item(tree_data)
                 self.recipe_tree.addTopLevelItem(root_item)
                 tree_count += 1
-        logger.debug(f"[on_calculation_finished] recipe_tree node count={tree_count}")
+        debug_log(f"[on_calculation_finished] recipe_tree node count={tree_count}")
         self.recipe_tree.expandAll()
         self.show_message(f"计算完成，需要 {len(requirements)} 种基础材料", "success")
     
@@ -1926,19 +2070,20 @@ class FFXIVCalculatorWindow(QMainWindow):
         self.show_message(f"计算失败: {error}", "error")
     
     def build_recipe_tree(self):
-        """构建配方树"""
         self.recipe_tree.clear()
-        
+        self.recipe_tree.setRootIsDecorated(True)
+        self.recipe_tree.setIndentation(20)
+        self.recipe_tree.setStyleSheet("""
+QTreeView::branch { background: transparent; border-left: 3px solid #444; }
+""")
         for item in self.selected_items:
             tree_data = self.calculator.get_recipe_tree(item['type'], item['id'], item['quantity'])
             if tree_data:
                 tree_item = self.create_tree_item(tree_data)
                 self.recipe_tree.addTopLevelItem(tree_item)
-        
         self.recipe_tree.expandAll()
     
-    def create_tree_item(self, data: Dict[str, Any]) -> QTreeWidgetItem:
-        """创建树形项（带图标）"""
+    def create_tree_item(self, data: dict) -> QTreeWidgetItem:
         item_name = data.get('name', f"ID: {data['id']}")
         item_type = data['type']
         quantity = data['quantity']
@@ -1948,15 +2093,14 @@ class FFXIVCalculatorWindow(QMainWindow):
             'product': '成品'
         }
         type_text = item_type_map.get(item_type, item_type)
-        tree_item = QTreeWidgetItem([item_name, self.format_number(quantity), type_text])
-        icon_path = resource_path(os.path.join(ICON_DIR, f"{item_name}.png"))
-        if os.path.exists(icon_path):
-            pixmap = QPixmap(icon_path)
-            if not pixmap.isNull():
-                pixmap = pixmap.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                tree_item.setIcon(0, QIcon(pixmap))
-        for child_data in data.get('children', []):
-            child_item = self.create_tree_item(child_data)
+        # 名称加数量
+        show_name = f"{item_name} x{self.format_number(quantity)}"
+        icon_item = get_item_icon_item(item_name, item_type=item_type, icon_size=24)
+        tree_item = QTreeWidgetItem([show_name, type_text])
+        if icon_item.icon().isNull() is False:
+            tree_item.setIcon(0, icon_item.icon())
+        for child in data.get('children', []):
+            child_item = self.create_tree_item(child)
             tree_item.addChild(child_item)
         return tree_item
     
@@ -2097,24 +2241,15 @@ class FFXIVCalculatorWindow(QMainWindow):
     
     def delete_recipe(self, item_type: str, item_id: int):
         """删除配方"""
-        reply = QMessageBox.question(
-            self, "确认删除", "确定要删除这个配方吗？",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        
-        if reply == QMessageBox.Yes:
-            try:
-                if item_type == 'material':
-                    self.db_manager.delete_material(item_id)
-                else:
-                    self.db_manager.delete_product(item_id)
-                
-                self.show_message("配方删除成功", "success")
-                self.refresh_recipe_list()
-                self.refresh_item_list()
-                
-            except Exception as e:
-                self.show_message(f"删除配方失败: {str(e)}", "error")
+        try:
+            if item_type == 'material':
+                self.db_manager.delete_material(item_id)
+            elif item_type == 'product':
+                self.db_manager.delete_product(item_id)
+            elif item_type == 'base':
+                self.db_manager.delete_base_material(item_id)
+        except Exception as e:
+            debug_log(f"delete_recipe error: {e}")
     
     def browse_csv_file(self):
         """浏览CSV文件"""
@@ -2205,7 +2340,7 @@ class FFXIVCalculatorWindow(QMainWindow):
             except Exception as e:
                 self.show_message(f"迁移失败: {str(e)}", "error")
     
-
+    
     def show_message(self, message: str, msg_type: str = "info"):
         """显示消息"""
         if FLUENT_AVAILABLE:
@@ -2333,7 +2468,7 @@ class FFXIVCalculatorWindow(QMainWindow):
                 self.suggestion_list.setVisible(False)
                 
         except Exception as e:
-            print(f"搜索建议时出错: {e}")
+            debug_log(f"搜索建议时出错: {e}")
             self.suggestion_list.setVisible(False)
     
     def on_suggestion_selected(self, item):
@@ -2390,24 +2525,16 @@ class FFXIVCalculatorWindow(QMainWindow):
     def refresh_requirements_table(self):
         """刷新需求表格"""
         self.requirements_table.setRowCount(len(self.current_requirements))
-        
         icon_size = self.requirements_table.verticalHeader().defaultSectionSize()
         for row, req in enumerate(self.current_requirements):
-            # 类型
-            type_text = "原材料" if req['type'] == "base" else "半成品"
-            icon_item = get_item_icon_item(req['name'], icon_size=icon_size)
+            # 传入req['type']
+            icon_item = get_item_icon_item(req['name'], item_type=req['type'], icon_size=icon_size)
             self.requirements_table.setItem(row, 0, icon_item)
             self.requirements_table.setRowHeight(row, icon_size)
-            
-            # 名称
             self.requirements_table.setItem(row, 1, QTableWidgetItem(req['name']))
             self.requirements_table.setRowHeight(row, icon_size)
-            
-            # 数量
             self.requirements_table.setItem(row, 2, QTableWidgetItem(self.format_number(req['quantity'])))
             self.requirements_table.setRowHeight(row, icon_size)
-            
-            # 删除按钮
             delete_button = QPushButton("删除")
             delete_button.clicked.connect(lambda checked, idx=row: self.remove_requirement(idx))
             self.requirements_table.setCellWidget(row, 3, delete_button)
@@ -2620,7 +2747,7 @@ class FFXIVCalculatorWindow(QMainWindow):
                 
                 imported_count += 1
             except Exception as e:
-                print(f"导入配方 {recipe.get('name', '未知')} 失败: {str(e)}")
+                debug_log(f"导入配方 {recipe.get('name', '未知')} 失败: {str(e)}")
         
         self.show_message(f"成功导入 {imported_count} 个配方", "success")
         self.refresh_recipe_list()
@@ -2655,7 +2782,7 @@ class FFXIVCalculatorWindow(QMainWindow):
         
         # 检测文件编码
         encoding = self._detect_file_encoding(file_path)
-        print(f"检测到文件编码: {encoding}")
+        debug_log(f"检测到文件编码: {encoding}")
         
         try:
             with open(file_path, 'r', encoding=encoding) as f:
@@ -2672,13 +2799,13 @@ class FFXIVCalculatorWindow(QMainWindow):
                             continue
                             
                         if not item_type_str:
-                            print(f"第{row_num}行：物品'{name}'缺少物品类型")
+                            debug_log(f"第{row_num}行：物品'{name}'缺少物品类型")
                             error_count += 1
                             continue
                         
                         # 验证物品类型
                         if item_type_str not in ['成品', '半成品']:
-                            print(f"第{row_num}行：物品'{name}'的类型'{item_type_str}'无效，应为'成品'或'半成品'")
+                            debug_log(f"第{row_num}行：物品'{name}'的类型'{item_type_str}'无效，应为'成品'或'半成品'")
                             error_count += 1
                             continue
                         
@@ -2725,7 +2852,7 @@ class FFXIVCalculatorWindow(QMainWindow):
                         imported_count += 1
                         
                     except Exception as e:
-                        print(f"第{row_num}行：导入配方 {row.get('物品名称', '未知')} 失败: {str(e)}")
+                        debug_log(f"第{row_num}行：导入配方 {row.get('物品名称', '未知')} 失败: {str(e)}")
                         error_count += 1
         
         except Exception as e:
@@ -2912,6 +3039,23 @@ class FFXIVCalculatorWindow(QMainWindow):
             quantity_widget.setValue(new_value)
             quantity_widget.blockSignals(False)
 
+    def on_add_base_material(self):
+        dialog = AddBaseMaterialDialog(self)
+        if dialog.exec() == QDialog.Accepted:
+            name = dialog.get_name()
+            if not name:
+                QMessageBox.warning(self, "警告", "请输入原材料名称")
+                return
+            # 检查重名
+            if self.db_manager.get_base_material_by_name(name):
+                QMessageBox.warning(self, "警告", f"已存在原材料: {name}")
+                return
+            self.db_manager.add_base_material(name)
+            self.refresh_data_models()
+            self.refresh_recipe_list()
+            self.refresh_item_list()
+            QMessageBox.information(self, "成功", f"已添加原材料: {name}")
+
 
 class SearchableDropdown(QFrame):
     """自定义下拉带搜索框控件"""
@@ -3020,14 +3164,32 @@ class SearchableComboBox(QComboBox):
         self.setEditText("")
 
 
-def get_item_icon_item(item_name: str, icon_dir: str = ICON_DIR, icon_size: int = 128) -> QTableWidgetItem:
-    item = QTableWidgetItem(item_name)
-    icon_path = resource_path(os.path.join(icon_dir, f"{item_name}.png"))
-    if os.path.exists(icon_path):
+def get_item_icon_item_for_list(item_name: str, item_type: str = None, icon_size: int = 128) -> QListWidgetItem:
+    show_name = item_name
+    item = QListWidgetItem(show_name)
+    icon_path = get_icon_path(item_name, item_type)
+    base_icon = None
+    if icon_path:
         pixmap = QPixmap(icon_path)
         if not pixmap.isNull():
             pixmap = pixmap.scaled(icon_size, icon_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            item.setIcon(QIcon(pixmap))
+            base_icon = QIcon(pixmap)
+    # 收藏品角标
+    if item_name.startswith("收藏用"):
+        scp_path = resource_path(os.path.join('icon', 'scp.png'))
+        if os.path.exists(scp_path):
+            scp_pixmap = QPixmap(scp_path).scaled(icon_size//2, icon_size//2, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            if base_icon:
+                base_pixmap = base_icon.pixmap(icon_size, icon_size)
+                painter = QPainter(base_pixmap)
+                painter.drawPixmap(base_pixmap.width()-scp_pixmap.width(), base_pixmap.height()-scp_pixmap.height(), scp_pixmap)
+                painter.end()
+                item.setIcon(QIcon(base_pixmap))
+            else:
+                item.setIcon(QIcon(scp_pixmap))
+            return item
+    if base_icon:
+        item.setIcon(base_icon)
     return item
 
 
@@ -3039,7 +3201,7 @@ def main():
     app.setApplicationVersion("2.0")
     app.setOrganizationName("FFXIV Tools")
     # 设置全局应用图标
-    app.setWindowIcon(QIcon(resource_path(os.path.join('icon', 'logo_use.png'))))
+    app.setWindowIcon(QIcon(resource_path(os.path.join('icon', 'logo.png'))))
     # 创建主窗口
     window = FFXIVCalculatorWindow()
     window.show()

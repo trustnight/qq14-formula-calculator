@@ -35,6 +35,6 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    icon='icon/logo_use.png',
+    icon='icon/logo.png',
     onefile=True
 )
