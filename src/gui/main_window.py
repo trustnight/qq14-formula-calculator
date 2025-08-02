@@ -3315,13 +3315,22 @@ class ReverseLookupDialog(QDialog):
         self.db_manager = db_manager
         self.setWindowTitle("配方反查")
         self.setModal(True)
-        self.resize(800, 600)
+        self.resize(1000, 700)
+        self.selected_items = []  # 存储选中的物品
         self.init_ui()
         self.load_items()
     
     def init_ui(self):
         """初始化界面"""
         layout = QVBoxLayout(self)
+        
+        # 创建水平分割器
+        splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(splitter)
+        
+        # 左侧：物品选择区域
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
         
         # 搜索区域
         search_layout = QHBoxLayout()
@@ -3330,7 +3339,7 @@ class ReverseLookupDialog(QDialog):
         self.search_edit.setPlaceholderText("输入物品名称...")
         self.search_edit.textChanged.connect(self.filter_items)
         search_layout.addWidget(self.search_edit)
-        layout.addLayout(search_layout)
+        left_layout.addLayout(search_layout)
         
         # 筛选区域
         filter_layout = QHBoxLayout()
@@ -3346,42 +3355,122 @@ class ReverseLookupDialog(QDialog):
         filter_layout.addWidget(self.material_checkbox)
         
         filter_layout.addStretch()
-        layout.addLayout(filter_layout)
+        left_layout.addLayout(filter_layout)
         
         # 物品列表
-        layout.addWidget(QLabel("选择物品:"))
+        left_layout.addWidget(QLabel("可选物品:"))
         self.items_table = QTableWidget()
-        self.items_table.setColumnCount(3)
-        self.items_table.setHorizontalHeaderLabels(["图标", "名称", "类型"])
+        self.items_table.setColumnCount(2)
+        self.items_table.setHorizontalHeaderLabels(["图标", "类型"])
         self.items_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.items_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.items_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
-        self.items_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.items_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.items_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.items_table.itemSelectionChanged.connect(self.on_item_selected)
-        layout.addWidget(self.items_table)
+        self.items_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.items_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.items_table.doubleClicked.connect(self.add_selected_item)
+        left_layout.addWidget(self.items_table)
+        
+        # 添加按钮
+        add_btn_layout = QHBoxLayout()
+        add_btn_layout.addStretch()
+        self.add_item_btn = QPushButton("添加到查询列表")
+        self.add_item_btn.clicked.connect(self.add_selected_item)
+        add_btn_layout.addWidget(self.add_item_btn)
+        left_layout.addLayout(add_btn_layout)
+        
+        splitter.addWidget(left_widget)
+        
+        # 右侧：查询和结果区域
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        
+        # 选中物品列表
+        right_layout.addWidget(QLabel("查询物品列表:"))
+        self.selected_items_table = QTableWidget()
+        self.selected_items_table.setColumnCount(2)
+        self.selected_items_table.setHorizontalHeaderLabels(["图标", "类型"])
+        self.selected_items_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.selected_items_table.setMaximumHeight(150)
+        self.selected_items_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
+        self.selected_items_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.selected_items_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        right_layout.addWidget(self.selected_items_table)
+        
+        # 操作按钮
+        btn_layout = QHBoxLayout()
+        self.remove_item_btn = QPushButton("移除选中")
+        self.remove_item_btn.clicked.connect(self.remove_selected_item)
+        btn_layout.addWidget(self.remove_item_btn)
+        
+        self.clear_all_btn = QPushButton("清空列表")
+        self.clear_all_btn.clicked.connect(self.clear_selected_items)
+        btn_layout.addWidget(self.clear_all_btn)
+        
+        btn_layout.addStretch()
+        
+        self.query_btn = QPushButton("查询配方")
+        self.query_btn.clicked.connect(self.query_recipes)
+        self.query_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0078d4;
+                color: white;
+                font-weight: bold;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #106ebe;
+            }
+            QPushButton:pressed {
+                background-color: #005a9e;
+            }
+        """)
+        btn_layout.addWidget(self.query_btn)
+        
+        right_layout.addLayout(btn_layout)
         
         # 结果区域
-        layout.addWidget(QLabel("可制作的配方:"))
+        right_layout.addWidget(QLabel("可制作的配方:"))
         self.result_table = QTableWidget()
-        self.result_table.setColumnCount(4)
-        self.result_table.setHorizontalHeaderLabels(["配方名称", "类型", "产出数量", "需要数量"])
+        self.result_table.setColumnCount(3)
+        self.result_table.setHorizontalHeaderLabels(["物品名称", "类型", "产出数量"])
         self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.result_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
-        self.result_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.result_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.result_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.result_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.result_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        layout.addWidget(self.result_table)
+        self.result_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        right_layout.addWidget(self.result_table)
+        
+        splitter.addWidget(right_widget)
+        
+        # 设置分割器比例
+        splitter.setSizes([400, 600])
         
         # 按钮区域
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         close_btn = QPushButton("关闭")
         close_btn.clicked.connect(self.close)
+        close_btn.setAutoDefault(False)  # 禁用自动默认按钮
+        close_btn.setDefault(False)      # 禁用默认按钮
         button_layout.addWidget(close_btn)
         layout.addLayout(button_layout)
+    
+    def keyPressEvent(self, event):
+        """处理键盘事件"""
+        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+            # 如果搜索框有焦点，不做任何操作（让搜索继续工作）
+            if self.search_edit.hasFocus():
+                return
+            # 如果其他控件有焦点，也不关闭对话框
+            event.ignore()
+            return
+        # 处理Escape键关闭对话框
+        elif event.key() == Qt.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
     
     def load_items(self):
         """加载所有物品"""
@@ -3430,45 +3519,123 @@ class ReverseLookupDialog(QDialog):
         # 显示物品
         self.items_table.setRowCount(len(filtered_items))
         for row, item in enumerate(filtered_items):
-            # 图标
+            # 图标（包含物品名称作为文本）
             icon_type = 'base' if item['type'] == '原材料' else 'material'
             icon_item = get_item_icon_item(item['name'], icon_type, 32)
+            icon_item.setText(item['name'])  # 在图标项中显示物品名称
             icon_item.setToolTip(item['name'])
+            icon_item.setData(Qt.UserRole, item)
             self.items_table.setItem(row, 0, icon_item)
-            
-            # 名称
-            name_item = QTableWidgetItem(item['name'])
-            name_item.setData(Qt.UserRole, item)
-            self.items_table.setItem(row, 1, name_item)
             
             # 类型
             type_item = QTableWidgetItem(item['type'])
-            self.items_table.setItem(row, 2, type_item)
+            self.items_table.setItem(row, 1, type_item)
     
     def filter_items(self):
         """筛选物品"""
         self.display_items()
     
-    def on_item_selected(self):
-        """物品选择变化"""
+    def add_selected_item(self):
+        """添加选中的物品到查询列表"""
         current_row = self.items_table.currentRow()
         if current_row >= 0:
-            name_item = self.items_table.item(current_row, 1)
-            if name_item:
-                item_data = name_item.data(Qt.UserRole)
-                self.load_recipes_for_item(item_data)
+            icon_item = self.items_table.item(current_row, 0)
+            if icon_item:
+                item_data = icon_item.data(Qt.UserRole)
+                # 检查是否已经添加过
+                for existing_item in self.selected_items:
+                    if existing_item['id'] == item_data['id'] and existing_item['db_type'] == item_data['db_type']:
+                        QMessageBox.information(self, "提示", f"物品 '{item_data['name']}' 已在查询列表中")
+                        return
+                
+                # 添加到选中列表
+                self.selected_items.append(item_data)
+                self.update_selected_items_display()
     
-    def load_recipes_for_item(self, item_data):
-        """加载使用指定物品的配方"""
-        # 转换数据库类型参数
-        ingredient_type = 'base' if item_data['db_type'] == 'base_material' else 'material'
-        recipes = self.db_manager.get_recipes_using_ingredient(ingredient_type, item_data['id'])
+    def remove_selected_item(self):
+        """移除选中的物品"""
+        current_row = self.selected_items_table.currentRow()
+        if current_row >= 0 and current_row < len(self.selected_items):
+            self.selected_items.pop(current_row)
+            self.update_selected_items_display()
+    
+    def clear_selected_items(self):
+        """清空选中的物品列表"""
+        self.selected_items.clear()
+        self.update_selected_items_display()
+        self.result_table.setRowCount(0)
+    
+    def update_selected_items_display(self):
+        """更新选中物品列表显示"""
+        self.selected_items_table.setRowCount(len(self.selected_items))
+        for row, item in enumerate(self.selected_items):
+            # 图标（包含名称）
+            icon_type = 'base' if item['type'] == '原材料' else 'material'
+            icon_item = get_item_icon_item(item['name'], icon_type, 32)
+            icon_item.setText(item['name'])  # 设置文本为物品名称
+            icon_item.setToolTip(item['name'])
+            self.selected_items_table.setItem(row, 0, icon_item)
+            
+            # 类型
+            type_item = QTableWidgetItem(item['type'])
+            self.selected_items_table.setItem(row, 1, type_item)
+    
+    def query_recipes(self):
+        """查询包含选中物品的配方"""
+        if not self.selected_items:
+            QMessageBox.warning(self, "警告", "请先选择要查询的物品")
+            return
         
-        self.result_table.setRowCount(len(recipes))
-        for row, recipe in enumerate(recipes):
-            # 配方名称
-            name_item = QTableWidgetItem(recipe['name'])
-            self.result_table.setItem(row, 0, name_item)
+        # 获取所有配方
+        all_recipes = []
+        
+        # 获取半成品配方
+        materials = self.db_manager.get_materials()
+        for material in materials:
+            requirements = self.db_manager.get_recipe_requirements('material', material['id'])
+            if requirements:
+                all_recipes.append({
+                    'name': material['name'],
+                    'type': '半成品',
+                    'output_quantity': material.get('output_quantity', 1),
+                    'requirements': requirements
+                })
+        
+        # 获取成品配方
+        products = self.db_manager.get_products()
+        for product in products:
+            requirements = self.db_manager.get_recipe_requirements('product', product['id'])
+            if requirements:
+                all_recipes.append({
+                    'name': product['name'],
+                    'type': '成品',
+                    'output_quantity': product.get('output_quantity', 1),
+                    'requirements': requirements
+                })
+        
+        # 筛选包含选中物品的配方
+        matching_recipes = []
+        for recipe in all_recipes:
+            contains_items = []
+            for req in recipe['requirements']:
+                for selected_item in self.selected_items:
+                    # 检查是否匹配
+                    if ((req['ingredient_type'] == 'base' and selected_item['db_type'] == 'base_material' and req['ingredient_id'] == selected_item['id']) or
+                        (req['ingredient_type'] == 'material' and selected_item['db_type'] == 'material' and req['ingredient_id'] == selected_item['id'])):
+                        contains_items.append(selected_item['name'])
+            
+            if contains_items:
+                recipe['contains_items'] = list(set(contains_items))  # 去重
+                matching_recipes.append(recipe)
+        
+        # 显示结果
+        self.result_table.setRowCount(len(matching_recipes))
+        for row, recipe in enumerate(matching_recipes):
+            # 图标（包含名称）
+            recipe_type = 'product' if recipe['type'] == '成品' else 'material'
+            icon_item = get_item_icon_item(recipe['name'], recipe_type, 64)
+            icon_item.setText(recipe['name'])  # 设置文本为配方名称
+            self.result_table.setItem(row, 0, icon_item)
             
             # 类型
             type_item = QTableWidgetItem(recipe['type'])
@@ -3476,11 +3643,11 @@ class ReverseLookupDialog(QDialog):
             
             # 产出数量
             output_item = QTableWidgetItem(str(recipe['output_quantity']))
+            output_item.setTextAlignment(Qt.AlignCenter)
             self.result_table.setItem(row, 2, output_item)
-            
-            # 需要数量
-            needed_item = QTableWidgetItem(str(recipe['quantity_needed']))
-            self.result_table.setItem(row, 3, needed_item)
+        
+        if not matching_recipes:
+            QMessageBox.information(self, "查询结果", "没有找到包含所选物品的配方")
 
 
 class MarketPriceDialog(QDialog):
