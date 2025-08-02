@@ -80,24 +80,40 @@ jobs:
         
     - name: 构建可执行文件
       run: |
+        # 清理之前的构建
+        if (Test-Path "dist") { Remove-Item "dist" -Recurse -Force }
+        if (Test-Path "build") { Remove-Item "build" -Recurse -Force }
+        
         # 创建构建目录
         mkdir -p build
         
-        # 使用现有的spec文件构建
-        pyinstaller main.spec --distpath=build --workpath=build/temp --specpath=build
+        # 使用现有的spec文件构建（不指定额外参数）
+        Write-Host "开始构建..."
+        pyinstaller main.spec
         
-        # 检查构建是否成功
-        if (!(Test-Path "build/qq14-formula-calculator.exe")) {
-          Write-Error "构建失败：未找到可执行文件"
+        # 检查构建结果
+        Write-Host "检查构建结果..."
+        if (Test-Path "dist/qq14-formula-calculator.exe") {
+          Write-Host "✅ 构建成功！文件在dist目录"
+          Copy-Item "dist/qq14-formula-calculator.exe" "build/qq14-formula-calculator.exe" -Force
+        } else {
+          Write-Host "❌ 构建失败，检查目录内容:"
+          Write-Host "=== dist目录 ==="
+          if (Test-Path "dist") { Get-ChildItem "dist" -Recurse }
+          Write-Host "=== build目录 ==="
+          if (Test-Path "build") { Get-ChildItem "build" -Recurse }
+          Write-Host "=== 当前目录 ==="
+          Get-ChildItem "." -Filter "*.exe"
           exit 1
         }
         
-        # 重命名为中文名称（可选）
+        # 创建中文版本
         Copy-Item "build/qq14-formula-calculator.exe" "build/FFXIV配方计算器.exe" -Force
         
-        Write-Host "构建成功！文件大小: $((Get-Item 'build/FFXIV配方计算器.exe').Length / 1MB) MB"
-        Write-Host "原始文件名: qq14-formula-calculator.exe"
-        Write-Host "中文文件名: FFXIV配方计算器.exe"
+        Write-Host "✅ 构建完成！"
+        Write-Host "文件大小: $((Get-Item 'build/FFXIV配方计算器.exe').Length / 1MB) MB"
+        Write-Host "英文版: build/qq14-formula-calculator.exe"
+        Write-Host "中文版: build/FFXIV配方计算器.exe"
       shell: pwsh
         
     - name: 创建发布
@@ -106,6 +122,7 @@ jobs:
         files: |
           build/FFXIV配方计算器.exe
           build/qq14-formula-calculator.exe
+          dist/qq14-formula-calculator.exe
           README.md
           requirements.txt
         body: |
@@ -204,6 +221,7 @@ jobs:
         path: |
           build/FFXIV配方计算器.exe
           build/qq14-formula-calculator.exe
+          dist/qq14-formula-calculator.exe
           README.md
           requirements.txt
         retention-days: 30 
