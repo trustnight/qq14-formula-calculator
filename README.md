@@ -288,20 +288,6 @@ qq14-formula-calculator/
    python main.py
    ```
 
-### CSV数据格式
-
-#### 原材料CSV格式
-```csv
-name,description
-示例原材料,这是一个示例描述
-```
-
-#### 半成品/成品CSV格式
-```csv
-name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,ingredient_type_2,ingredient_name_2,quantity_2
-示例半成品,1,这是一个示例半成品,base,示例原材料1,2,base,示例原材料2,1
-```
-
 ## 技术特点
 
 1. **模块化设计**: 核心逻辑与界面分离，便于维护和扩展
