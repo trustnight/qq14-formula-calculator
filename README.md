@@ -45,24 +45,41 @@
 ## 项目结构
 
 ```
-ffixv-cw-calculate/
-├── src/                    # 源代码目录
-│   ├── core/              # 核心业务逻辑
-│   │   ├── calculator.py  # 配方计算引擎
-│   │   ├── database.py    # 数据库管理
+qq14-formula-calculator/
+├── main.py               # 程序入口文件
+├── main.spec             # PyInstaller打包配置
+├── requirements.txt      # Python依赖包列表
+├── ffixv_recipes.db     # SQLite数据库文件
+├── src/                  # 源代码目录
+│   ├── config.py         # 全局配置常量
+│   ├── core/             # 核心业务逻辑
+│   │   ├── calculator.py # 配方计算引擎
+│   │   ├── database.py   # 数据库管理
 │   │   ├── csv_importer.py # CSV导入导出
 │   │   └── data_migrator.py # 数据迁移工具
-│   ├── gui/               # 图形用户界面
-│   │   ├── __init__.py
-│   │   └── main_window.py # 主窗口界面
-│   ├── database/          # 数据库文件目录
-│   └── main.py           # 程序入口
-├── icon/                  # 图标资源
-├── requirements.txt       # 项目依赖
+│   └── gui/              # 图形用户界面
+│       ├── __init__.py
+│       └── main_window.py # 主窗口界面
+├── icon/                 # 图标资源目录
+│   ├── logo.png          # 应用图标
+│   ├── base/             # 基础材料图标
+│   ├── material/         # 半成品材料图标
+│   └── product/          # 成品图标
+├── .github/              # GitHub Actions工作流
+│   └── workflows/
+│       └── release.yml   # 自动发布配置
 └── README.md             # 项目说明文档
 ```
 
 ## 详细代码结构
+
+### 配置模块 (src/config.py)
+
+**全局配置常量**
+- `ICON_SIZE`: 物品图标显示尺寸 (80px)
+- `GRID_SIZE`: 物品格子尺寸 (128px)
+- `ICON_SPACING`: 物品格子间距 (5px)
+- `TABLE_ROW_HEIGHT`: 表格行高 (28px)
 
 ### 核心模块 (src/core/)
 
@@ -242,9 +259,12 @@ ffixv-cw-calculate/
 **全局函数**:
 - `main()`: 应用程序入口函数，创建QApplication和主窗口
 
-### 程序入口 (src/main.py)
+### 程序入口 (main.py)
 
-简单的程序启动脚本，导入并调用GUI模块的main函数。
+主程序入口文件，负责：
+- 资源文件路径处理（兼容PyInstaller打包环境）
+- 数据库文件释放（在打包环境下）
+- 调用GUI模块的main函数启动应用程序
 
 ## 安装和运行
 
@@ -265,7 +285,6 @@ ffixv-cw-calculate/
    ```
 3. 运行程序：
    ```bash
-   cd src
    python main.py
    ```
 
@@ -291,6 +310,8 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 4. **完整的数据管理**: 支持增删改查、导入导出、数据迁移等完整功能
 5. **递归计算算法**: 智能处理多层级配方依赖关系
 6. **用户友好**: 直观的界面设计和完善的错误处理
+7. **一键打包**: 使用main.spec配置文件，支持PyInstaller一键打包为exe
+8. **自动发布**: 集成GitHub Actions，支持自动构建和发布
 
 ## 开发说明
 
