@@ -1463,9 +1463,12 @@ class FFXIVCalculatorWindow(QMainWindow):
         layout.addWidget(self.result_label)
         
         # 成本价和利润显示区域
-        self.profit_info_label = QLabel("")
-        self.profit_info_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #2E8B57; margin: 5px; padding: 5px; background-color: #F0F8FF; border: 1px solid #87CEEB; border-radius: 3px;")
+        self.profit_info_label = QLabel("💰 成本价和利润信息将在这里显示")
+        self.profit_info_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #FF4500; margin: 10px; padding: 15px; background-color: #FFFACD; border: 3px solid #FF6347; border-radius: 8px; min-height: 30px;")
+        self.profit_info_label.setAlignment(Qt.AlignCenter)
+        self.profit_info_label.setVisible(True)  # 初始显示，便于调试
         layout.addWidget(self.profit_info_label)
+        debug_log("[create_calculation_result_widget] 创建了利润信息标签，初始可见")
         
         # 结果表格
         if FLUENT_AVAILABLE:
@@ -2126,12 +2129,23 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
             self.result_label.setText("计算结果")
         
         # 显示成本价和利润信息
+        debug_log(f"[on_calculation_finished] profit_info={profit_info}, total_cost_int={total_cost_int}")
+        
         if profit_info:
             market_price = int(profit_info['selling_price'])
             profit_amount = int(profit_info['profit'])
             tax_rate = profit_info['tax_rate']
             
-            profit_text = f"💰 成本价: {total_cost_int} | 市场价: {market_price} | 交易税: {tax_rate:.1f}% | 单件利润: {profit_amount}"
+            # 计算单件成本
+            total_quantity = 0
+            for row in range(self.selected_table.rowCount()):
+                spin = self.selected_table.cellWidget(row, 2)
+                if spin:
+                    total_quantity += spin.value()
+            
+            unit_cost = total_cost_int // total_quantity if total_quantity > 0 else 0
+            
+            profit_text = f"💰 成本价: {unit_cost} | 市场价: {market_price} | 交易税: {tax_rate:.1f}% | 单件利润: {profit_amount}"
             if profit_amount > 0:
                 profit_text += " ✅"
             else:
@@ -2139,8 +2153,33 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
             
             self.profit_info_label.setText(profit_text)
             self.profit_info_label.setVisible(True)
+            debug_log(f"[on_calculation_finished] 显示利润信息: {profit_text}")
         else:
-            self.profit_info_label.setVisible(False)
+            # 即使没有利润信息，也显示成本价
+            if total_cost_int > 0:
+                # 计算单件成本
+                total_quantity = 0
+                for row in range(self.selected_table.rowCount()):
+                    spin = self.selected_table.cellWidget(row, 2)
+                    if spin:
+                        total_quantity += spin.value()
+                
+                unit_cost = total_cost_int // total_quantity if total_quantity > 0 else 0
+                
+                profit_text = f"💰 成本价: {unit_cost} | 市场价: 未设置 | 交易税: 5.0% | 单件利润: 无法计算"
+                self.profit_info_label.setText(profit_text)
+                self.profit_info_label.setVisible(True)
+                debug_log(f"[on_calculation_finished] 显示成本价信息: {profit_text}")
+            else:
+                # 强制显示成本价信息，即使总成本为0
+                profit_text = f"💰 成本价: 0 | 市场价: 未设置 | 交易税: 5.0% | 单件利润: 无法计算"
+                self.profit_info_label.setText(profit_text)
+                self.profit_info_label.setVisible(True)
+                debug_log(f"[on_calculation_finished] 强制显示成本价信息: {profit_text}")
+        
+        # 强制确保标签可见
+        debug_log(f"[on_calculation_finished] profit_info_label.visible={self.profit_info_label.isVisible()}")
+        debug_log(f"[on_calculation_finished] profit_info_label.text='{self.profit_info_label.text()}'")
         # 重新从表格获取已选配方，保证分解树和计算一致
         items = []
         type_map = {'成品': 'product', '半成品': 'material'}
@@ -2528,8 +2567,11 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
     def calculate_profit(self, total_cost):
         """计算单件利润"""
         try:
+            debug_log(f"[calculate_profit] 开始计算利润，总成本: {total_cost}")
+            
             # 获取选中的第一个物品（假设只计算一个物品的利润）
             if self.selected_table.rowCount() == 0:
+                debug_log("[calculate_profit] 选中的表格为空")
                 return None
             
             # 获取第一行的物品信息
@@ -2538,11 +2580,14 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
             quantity_widget = self.selected_table.cellWidget(0, 2)
             
             if not (name_item and type_item and quantity_widget):
+                debug_log("[calculate_profit] 第一行物品信息不完整")
                 return None
             
             item_name = name_item.text().strip()
             item_type_text = type_item.text().strip()
             quantity = quantity_widget.value()
+            
+            debug_log(f"[calculate_profit] 物品名称: {item_name}, 类型: {item_type_text}, 数量: {quantity}")
             
             # 确定物品类型
             if item_type_text == "成品":
@@ -2552,6 +2597,7 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
                 item_type = "material"
                 items = self.db_manager.get_materials()
             else:
+                debug_log(f"[calculate_profit] 未知物品类型: {item_type_text}")
                 return None
             
             # 查找物品的售价
@@ -2561,23 +2607,32 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
                     item_price = item.get('price', 0.0)
                     break
             
+            debug_log(f"[calculate_profit] 物品售价: {item_price}")
+            
             if item_price <= 0:
+                debug_log("[calculate_profit] 物品售价为0或负数")
                 return None
             
-            # 获取税率（从设置中获取，默认5%）
-            tax_rate = getattr(self, 'market_tax_rate', 5.0)
+            # 获取税率（从数据库获取，默认5%）
+            tax_rate = self.db_manager.get_tax_rate()
+            debug_log(f"[calculate_profit] 税率: {tax_rate}%")
             
             # 计算单件利润：售价 * (1 - 税率) - 单件成本
             single_item_cost = total_cost / quantity if quantity > 0 else total_cost
             selling_price_after_tax = item_price * (1 - tax_rate / 100)
             profit = selling_price_after_tax - single_item_cost
             
-            return {
+            debug_log(f"[calculate_profit] 单件成本: {single_item_cost}, 税后售价: {selling_price_after_tax}, 利润: {profit}")
+            
+            result = {
                 'profit': profit,
                 'selling_price': item_price,
                 'tax_rate': tax_rate,
                 'cost_per_item': single_item_cost
             }
+            
+            debug_log(f"[calculate_profit] 返回结果: {result}")
+            return result
             
         except Exception as e:
             debug_log(f"计算利润失败: {str(e)}")
@@ -3774,7 +3829,7 @@ class MarketPriceDialog(QDialog):
                     'name': base_material['name'],
                     'type': '原材料',
                     'item_type': 'base_material',
-                    'price': base_material.get('price', 0.0)
+                    'price': base_material.get('cost', 0.0)  # 原材料使用cost字段
                 })
             
             # 添加半成品
@@ -3882,7 +3937,8 @@ class MarketPriceDialog(QDialog):
                                 self.db_manager.update_base_material(
                                     item_id, 
                                     base_material['name'], 
-                                    new_price
+                                    base_material.get('description'), 
+                                    new_price  # 原材料的cost字段
                                 )
                         elif item_type == 'material':
                             # 获取半成品信息
