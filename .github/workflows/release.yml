@@ -114,6 +114,16 @@ jobs:
         Write-Host "文件大小: $((Get-Item 'build/FFXIV配方计算器.exe').Length / 1MB) MB"
         Write-Host "英文版: build/qq14-formula-calculator.exe"
         Write-Host "中文版: build/FFXIV配方计算器.exe"
+        
+        # 验证文件存在
+        Write-Host "=== 验证文件存在 ==="
+        if (Test-Path "build/FFXIV配方计算器.exe") { Write-Host "✅ 中文版文件存在" } else { Write-Host "❌ 中文版文件不存在" }
+        if (Test-Path "build/qq14-formula-calculator.exe") { Write-Host "✅ 英文版文件存在" } else { Write-Host "❌ 英文版文件不存在" }
+        if (Test-Path "README.md") { Write-Host "✅ README.md存在" } else { Write-Host "❌ README.md不存在" }
+        if (Test-Path "requirements.txt") { Write-Host "✅ requirements.txt存在" } else { Write-Host "❌ requirements.txt不存在" }
+        
+        Write-Host "=== build目录内容 ==="
+        Get-ChildItem "build" -Recurse
       shell: pwsh
         
     - name: 创建发布
@@ -122,7 +132,6 @@ jobs:
         files: |
           build/FFXIV配方计算器.exe
           build/qq14-formula-calculator.exe
-          dist/qq14-formula-calculator.exe
           README.md
           requirements.txt
         body: |
