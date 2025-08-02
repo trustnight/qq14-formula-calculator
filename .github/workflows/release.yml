@@ -219,7 +219,7 @@ jobs:
         } else {
           Write-Host "标签数量不超过2个，无需清理"
         }
-            shell: pwsh
+      shell: pwsh
         
     - name: 上传构建产物
       uses: actions/upload-artifact@v4
