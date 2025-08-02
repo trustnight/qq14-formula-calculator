@@ -1462,6 +1462,11 @@ class FFXIVCalculatorWindow(QMainWindow):
         self.result_label.setStyleSheet("font-weight: bold; font-size: 14px; margin: 10px;")
         layout.addWidget(self.result_label)
         
+        # 成本价和利润显示区域
+        self.profit_info_label = QLabel("")
+        self.profit_info_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #2E8B57; margin: 5px; padding: 5px; background-color: #F0F8FF; border: 1px solid #87CEEB; border-radius: 3px;")
+        layout.addWidget(self.profit_info_label)
+        
         # 结果表格
         if FLUENT_AVAILABLE:
             self.result_table = TableWidget()
@@ -2096,15 +2101,15 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
             quantity_item.setTextAlignment(Qt.AlignCenter)
             self.result_table.setItem(i, 1, quantity_item)
             
-            # 添加单价和小计列，并设置居中对齐
-            cost = req.get('cost', 0)
-            total_item_cost = req.get('total_cost', 0)
+            # 添加单价和小计列，并设置居中对齐（整数显示）
+            cost = int(req.get('cost', 0))
+            total_item_cost = int(req.get('total_cost', 0))
             
-            cost_item = QTableWidgetItem(f"{cost:.2f}")
+            cost_item = QTableWidgetItem(str(cost))
             cost_item.setTextAlignment(Qt.AlignCenter)
             self.result_table.setItem(i, 2, cost_item)
             
-            total_cost_item = QTableWidgetItem(f"{total_item_cost:.2f}")
+            total_cost_item = QTableWidgetItem(str(total_item_cost))
             total_cost_item.setTextAlignment(Qt.AlignCenter)
             self.result_table.setItem(i, 3, total_cost_item)
             
@@ -2113,14 +2118,29 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
         # 计算单件利润
         profit_info = self.calculate_profit(total_cost)
         
-        # 更新结果标题显示总成本和利润
-        if total_cost > 0:
-            if profit_info:
-                self.result_label.setText(f"计算结果 - 总成本: {total_cost:.2f} | 单件利润: {profit_info['profit']:.2f} (售价: {profit_info['selling_price']:.2f}, 税率: {profit_info['tax_rate']:.1f}%)")
-            else:
-                self.result_label.setText(f"计算结果 - 总成本: {total_cost:.2f}")
+        # 更新结果标题显示总成本（整数）
+        total_cost_int = int(total_cost)
+        if total_cost_int > 0:
+            self.result_label.setText(f"计算结果 - 总成本: {total_cost_int}")
         else:
             self.result_label.setText("计算结果")
+        
+        # 显示成本价和利润信息
+        if profit_info:
+            market_price = int(profit_info['selling_price'])
+            profit_amount = int(profit_info['profit'])
+            tax_rate = profit_info['tax_rate']
+            
+            profit_text = f"💰 成本价: {total_cost_int} | 市场价: {market_price} | 交易税: {tax_rate:.1f}% | 单件利润: {profit_amount}"
+            if profit_amount > 0:
+                profit_text += " ✅"
+            else:
+                profit_text += " ❌"
+            
+            self.profit_info_label.setText(profit_text)
+            self.profit_info_label.setVisible(True)
+        else:
+            self.profit_info_label.setVisible(False)
         # 重新从表格获取已选配方，保证分解树和计算一致
         items = []
         type_map = {'成品': 'product', '半成品': 'material'}
