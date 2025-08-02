@@ -311,13 +311,6 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 
 如果您觉得这个项目有用，请给我们一个 ⭐ Star！
 
-[![GitHub stars](https://img.shields.io/github/stars/trustnight/qq14-formula-calculator?style=social)](https://github.com/trustnight/qq14-formula-calculator)
-[![GitHub forks](https://img.shields.io/github/forks/trustnight/qq14-formula-calculator?style=social)](https://github.com/trustnight/qq14-formula-calculator)
-[![GitHub issues](https://img.shields.io/github/issues/trustnight/qq14-formula-calculator)](https://github.com/trustnight/qq14-formula-calculator/issues)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/trustnight/qq14-formula-calculator)](https://github.com/trustnight/qq14-formula-calculator/pulls)
-
-### 📈 项目活跃度统计
-
 #### 📊 实时统计
 
 | 指标 | 状态 | 趋势 |
@@ -326,3 +319,25 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 | 🔀 Forks | ![GitHub forks](https://img.shields.io/github/forks/trustnight/qq14-formula-calculator) | 📈 持续增长 |
 | 👥 订阅者 | ![GitHub watchers](https://img.shields.io/github/watchers/trustnight/qq14-formula-calculator) | 📈 持续增长 |
 | 🚀 下载量 | ![GitHub release downloads](https://img.shields.io/github/downloads/trustnight/qq14-formula-calculator/latest/total) | 📈 持续增长 |
+
+
+#### 📊 项目活跃度
+
+![GitHub活跃度](https://img.shields.io/github/commit-activity/m/trustnight/qq14-formula-calculator?style=for-the-badge&color=blue)
+
+![GitHub最后提交](https://img.shields.io/github/last-commit/trustnight/qq14-formula-calculator?style=for-the-badge&color=green)
+
+
+#### 📊 GitHub统计图表
+
+![GitHub统计](https://github-readme-stats.vercel.app/api?username=trustnight&show_icons=true&theme=radical&hide_border=true&include_all_commits=true&count_private=true)
+
+![GitHub语言统计](https://github-readme-stats.vercel.app/api/top-langs/?username=trustnight&layout=compact&theme=radical&hide_border=true)
+
+#### 📈 项目趋势
+
+![GitHub趋势](https://github-readme-streak-stats.herokuapp.com/?user=trustnight&theme=radical&hide_border=true)
+
+#### 🏆 贡献统计
+
+![GitHub贡献](https://github-readme-activity-graph.vercel.app/graph?username=trustnight&theme=radical&hide_border=true&area=true)
