@@ -1,0 +1,209 @@
+name: 自动发布构建
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送v开头的tag时触发
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史用于tag管理
+        
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: 检查版本信息
+      run: |
+        Write-Host "=== 版本信息 ==="
+        Write-Host "Python版本: $(python --version)"
+        Write-Host "Pip版本: $(pip --version)"
+        Write-Host "Git版本: $(git --version)"
+        Write-Host "操作系统: $env:OS"
+        Write-Host "=================="
+      shell: pwsh
+        
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+        # 检查PyInstaller版本
+        Write-Host "PyInstaller版本: $(pyinstaller --version)"
+        
+    - name: 版本兼容性检查
+      run: |
+        Write-Host "=== 版本兼容性检查 ==="
+        
+        # 检查Python版本
+        $pythonVersion = python --version 2>&1
+        if ($pythonVersion -match "Python (\d+\.\d+)") {
+          $majorMinor = $matches[1]
+          Write-Host "Python版本: $majorMinor"
+          
+          if ([version]$majorMinor -ge [version]"3.8") {
+            Write-Host "✅ Python版本兼容"
+          } else {
+            Write-Host "❌ Python版本过低，需要3.8+"
+            exit 1
+          }
+        }
+        
+        # 检查PyInstaller
+        try {
+          $pyinstallerVersion = pyinstaller --version 2>&1
+          Write-Host "PyInstaller版本: $pyinstallerVersion"
+          Write-Host "✅ PyInstaller可用"
+        } catch {
+          Write-Host "❌ PyInstaller不可用"
+          exit 1
+        }
+        
+        # 检查spec文件
+        if (Test-Path "main.spec") {
+          Write-Host "✅ main.spec文件存在"
+        } else {
+          Write-Host "❌ main.spec文件不存在"
+          exit 1
+        }
+        
+        Write-Host "========================"
+      shell: pwsh
+        
+    - name: 构建可执行文件
+      run: |
+        # 创建构建目录
+        mkdir -p build
+        
+        # 使用现有的spec文件构建
+        pyinstaller main.spec --distpath=build --workpath=build/temp --specpath=build
+        
+        # 检查构建是否成功
+        if (!(Test-Path "build/qq14-formula-calculator.exe")) {
+          Write-Error "构建失败：未找到可执行文件"
+          exit 1
+        }
+        
+        # 重命名为中文名称（可选）
+        Copy-Item "build/qq14-formula-calculator.exe" "build/FFXIV配方计算器.exe" -Force
+        
+        Write-Host "构建成功！文件大小: $((Get-Item 'build/FFXIV配方计算器.exe').Length / 1MB) MB"
+        Write-Host "原始文件名: qq14-formula-calculator.exe"
+        Write-Host "中文文件名: FFXIV配方计算器.exe"
+      shell: pwsh
+        
+    - name: 创建发布
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          build/FFXIV配方计算器.exe
+          build/qq14-formula-calculator.exe
+          README.md
+          requirements.txt
+        body: |
+          ## 🎉 新版本发布 - ${{ github.ref_name }}
+          
+          ### 📦 下载
+          - **Windows (中文名)**: [FFXIV配方计算器.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/FFXIV配方计算器.exe)
+          - **Windows (英文名)**: [qq14-formula-calculator.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/qq14-formula-calculator.exe)
+          
+          ### 🔧 安装说明
+          1. 下载任意一个 `.exe` 文件
+          2. 双击运行即可使用
+          3. 无需安装Python环境
+          4. 包含完整的图标和数据库文件
+          
+          ### 📋 系统要求
+          - Windows 10 或更高版本
+          - 至少 4GB RAM
+          - 100MB 可用存储空间
+          
+          ### 🛠️ 构建说明
+          - 使用 `main.spec` 配置文件构建
+          - 包含所有必要的依赖和数据文件
+          - 单文件部署，便携性强
+          
+          ### 🆕 更新内容
+          请查看提交记录了解详细更新内容：
+          https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 HEAD^)...${{ github.ref_name }}
+          
+          ### 📊 构建信息
+          - 构建时间: ${{ github.event.head_commit.timestamp }}
+          - 提交哈希: ${{ github.sha }}
+          - 构建环境: Windows Latest
+          - Python版本: 3.11
+          - PyInstaller版本: 最新
+          - 构建配置: main.spec
+          - GitHub Actions: v4
+          
+          ---
+          
+          *此版本由GitHub Actions自动构建发布*
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 管理标签（保持最多2个）
+      run: |
+        # 配置Git用户信息
+        git config --global user.email "action@github.com"
+        git config --global user.name "GitHub Action"
+        
+        # 获取所有标签并按版本排序
+        $allTags = git tag --sort=-version:refname | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' }
+        
+        Write-Host "当前所有标签: $($allTags -join ', ')"
+        
+        # 如果标签数量超过2个，删除最旧的
+        if ($allTags.Count -gt 2) {
+          $tagsToDelete = $allTags | Select-Object -Skip 2
+          Write-Host "需要删除的旧标签: $($tagsToDelete -join ', ')"
+          
+          foreach ($tag in $tagsToDelete) {
+            Write-Host "正在删除标签: $tag"
+            
+            # 删除远程标签
+            try {
+              git push origin --delete $tag
+              Write-Host "远程标签 $tag 删除成功"
+            } catch {
+              Write-Host "远程标签 $tag 删除失败（可能不存在）"
+            }
+            
+            # 删除本地标签
+            try {
+              git tag -d $tag
+              Write-Host "本地标签 $tag 删除成功"
+            } catch {
+              Write-Host "本地标签 $tag 删除失败"
+            }
+          }
+          
+          # 推送标签更新
+          git push origin --tags
+          Write-Host "标签管理完成"
+        } else {
+          Write-Host "标签数量不超过2个，无需清理"
+        }
+      shell: pwsh
+      
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: FFXIV配方计算器-${{ github.ref_name }}
+        path: |
+          build/FFXIV配方计算器.exe
+          build/qq14-formula-calculator.exe
+          README.md
+          requirements.txt
+        retention-days: 30 
