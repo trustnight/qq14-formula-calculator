@@ -316,7 +316,53 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 [![GitHub issues](https://img.shields.io/github/issues/your-username/qq14-formula-calculator)](https://github.com/your-username/qq14-formula-calculator/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/your-username/qq14-formula-calculator)](https://github.com/your-username/qq14-formula-calculator/pulls)
 
-### 📈 项目订阅趋势
+### 📈 项目活跃度统计
 
-![GitHub订阅趋势](https://repobeats.axiom.co/api/embed/your-repobeats-hash.svg "Repobeats分析图表")
+#### 📊 实时统计
+
+| 指标 | 状态 | 趋势 |
+|------|------|------|
+| ⭐ Stars | ![GitHub stars](https://img.shields.io/github/stars/your-username/qq14-formula-calculator) | 📈 持续增长 |
+| 🔀 Forks | ![GitHub forks](https://img.shields.io/github/forks/your-username/qq14-formula-calculator) | 📈 持续增长 |
+| 👥 订阅者 | ![GitHub watchers](https://img.shields.io/github/watchers/your-username/qq14-formula-calculator) | 📈 持续增长 |
+| 🚀 下载量 | ![GitHub release downloads](https://img.shields.io/github/downloads/your-username/qq14-formula-calculator/latest/total) | 📈 持续增长 |
+
+#### 📈 项目发展历程
+
+```mermaid
+timeline
+    title FFXIV配方计算器发展历程
+    2024年1月 : 项目启动
+    2024年2月 : 核心功能完成
+    2024年3月 : 界面优化
+    2024年4月 : 自动发布系统
+    2024年5月 : 持续改进
+```
+
+#### 🎯 项目目标
+
+```mermaid
+graph LR
+    A[当前状态] --> B[功能完善]
+    B --> C[用户增长]
+    C --> D[社区建设]
+    D --> E[持续优化]
+    
+    style A fill:#e3f2fd
+    style B fill:#bbdefb
+    style C fill:#90caf9
+    style D fill:#64b5f6
+    style E fill:#42a5f5
+```
+
+#### 📊 技术栈使用情况
+
+```mermaid
+pie title 技术栈分布
+    "Python" : 45
+    "PySide6" : 25
+    "SQLite" : 15
+    "PyInstaller" : 10
+    "其他" : 5
+```
 
