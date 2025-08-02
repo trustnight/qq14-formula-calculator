@@ -107,18 +107,13 @@ jobs:
           exit 1
         }
         
-        # 创建中文版本
-        Copy-Item "build/qq14-formula-calculator.exe" "build/FFXIV配方计算器.exe" -Force
-        
         Write-Host "✅ 构建完成！"
-        Write-Host "文件大小: $((Get-Item 'build/FFXIV配方计算器.exe').Length / 1MB) MB"
-        Write-Host "英文版: build/qq14-formula-calculator.exe"
-        Write-Host "中文版: build/FFXIV配方计算器.exe"
+        Write-Host "文件大小: $((Get-Item 'build/qq14-formula-calculator.exe').Length / 1MB) MB"
+        Write-Host "文件: build/qq14-formula-calculator.exe"
         
         # 验证文件存在
         Write-Host "=== 验证文件存在 ==="
-        if (Test-Path "build/FFXIV配方计算器.exe") { Write-Host "✅ 中文版文件存在" } else { Write-Host "❌ 中文版文件不存在" }
-        if (Test-Path "build/qq14-formula-calculator.exe") { Write-Host "✅ 英文版文件存在" } else { Write-Host "❌ 英文版文件不存在" }
+        if (Test-Path "build/qq14-formula-calculator.exe") { Write-Host "✅ exe文件存在" } else { Write-Host "❌ exe文件不存在" }
         if (Test-Path "README.md") { Write-Host "✅ README.md存在" } else { Write-Host "❌ README.md不存在" }
         if (Test-Path "requirements.txt") { Write-Host "✅ requirements.txt存在" } else { Write-Host "❌ requirements.txt不存在" }
         
@@ -154,10 +149,6 @@ jobs:
           - 使用 `main.spec` 配置文件构建
           - 包含所有必要的依赖和数据文件
           - 单文件部署，便携性强
-          
-          ### 🆕 更新内容
-          请查看提交记录了解详细更新内容：
-          https://github.com/${{ github.repository }}/compare/v0.0.3...${{ github.ref_name }}
           
           ### 📊 构建信息
           - 构建时间: ${{ github.event.head_commit.timestamp }}
@@ -227,6 +218,4 @@ jobs:
         name: FFXIV配方计算器-${{ github.ref_name }}
         path: |
           build/qq14-formula-calculator.exe
-          README.md
-          requirements.txt
         retention-days: 30 
