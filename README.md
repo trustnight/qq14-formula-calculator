@@ -7,7 +7,7 @@
 
 # ⚠️ 重要声明 ⚠️
 
-## <span style="color:red;font-size:2em">❗ 本工具部分内容由AI生成 ❗</span>
+## <span style="color:red;font-size:2em">❗ 本工具99%由AI生成 ❗</span>
 
 ### <span style="color:red;font-size:1.5em">❗ 配方数据可能不完整，需要用户自行添加 ❗</span>
 
@@ -315,6 +315,39 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 [![GitHub forks](https://img.shields.io/github/forks/your-username/qq14-formula-calculator?style=social)](https://github.com/your-username/qq14-formula-calculator)
 [![GitHub issues](https://img.shields.io/github/issues/your-username/qq14-formula-calculator)](https://github.com/your-username/qq14-formula-calculator/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/your-username/qq14-formula-calculator)](https://github.com/your-username/qq14-formula-calculator/pulls)
+
+### 📈 项目订阅趋势
+
+![GitHub订阅趋势](https://repobeats.axiom.co/api/embed/your-repobeats-hash.svg "Repobeats分析图表")
+
+*项目订阅和活跃度趋势图 - 数据来自GitHub Analytics*
+
+#### 📊 详细统计
+
+| 指标 | 当前值 | 趋势 |
+|------|--------|------|
+| ⭐ Stars | ![GitHub stars](https://img.shields.io/github/stars/your-username/qq14-formula-calculator) | 📈 增长中 |
+| 🔀 Forks | ![GitHub forks](https://img.shields.io/github/forks/your-username/qq14-formula-calculator) | 📈 增长中 |
+| 👥 订阅者 | ![GitHub watchers](https://img.shields.io/github/watchers/your-username/qq14-formula-calculator) | 📈 增长中 |
+| 🚀 下载量 | ![PyPI downloads](https://img.shields.io/pypi/dm/qq14-formula-calculator) | 📈 增长中 |
+
+#### 📈 月度活跃度
+
+```mermaid
+graph TD
+    A[项目启动] --> B[第一个Star]
+    B --> C[100+ Stars]
+    C --> D[500+ Stars]
+    D --> E[1000+ Stars]
+    E --> F[持续增长]
+    
+    style A fill:#e1f5fe
+    style B fill:#b3e5fc
+    style C fill:#81d4fa
+    style D fill:#4fc3f7
+    style E fill:#29b6f6
+    style F fill:#0288d1
+```
 
 ### 🔔 关注更新
 
