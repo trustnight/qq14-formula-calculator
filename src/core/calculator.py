@@ -234,26 +234,38 @@ class BOMCalculator:
         
         return build_tree_node(item_type, item_id, quantity)
     
-    def format_requirements_for_display(self, requirements: Dict[int, float]) -> List[Dict[str, Any]]:
+    def format_requirements_for_display(self, requirements: Dict[int, float]) -> Dict[str, Any]:
         """
         格式化需求结果用于界面显示
         :param requirements: 基础材料需求字典
-        :return: 格式化的需求列表
+        :return: 包含需求列表和总成本的字典
         """
         result = []
+        total_cost = 0.0
         
         for base_id, quantity in requirements.items():
             base_material = self.db_manager.get_base_material_by_id(base_id)
             if base_material:
+                cost = base_material.get('cost', 0)
+                item_total_cost = cost * quantity
+                total_cost += item_total_cost
+                
                 result.append({
                     'id': base_id,
                     'name': base_material['name'],
-                    'quantity': quantity
+                    'quantity': quantity,
+                    'type': 'base',
+                    'cost': cost,
+                    'total_cost': item_total_cost
                 })
         
         # 按名称排序
         result.sort(key=lambda x: x['name'])
-        return result
+        
+        return {
+            'requirements': result,
+            'total_cost': total_cost
+        }
     
     def get_item_info(self, item_type: str, item_id: int) -> Optional[Dict[str, Any]]:
         """

@@ -60,13 +60,24 @@ class CSVImporter:
                             material_id = self.db_manager.add_material(name, 1, None)
                             reqs = self._parse_requirements(requirements_str)
                             for req_name, qty in reqs:
-                                # 只允许原材料作为半成品成分
-                                base = self.db_manager.get_base_material_by_name(req_name)
-                                if not base:
-                                    # 自动添加原材料
-                                    base_id = self.db_manager.add_base_material(req_name, None)
+                                # 检查是否有半成品标记[m]
+                                if req_name.startswith('[m]'):
+                                    # 去掉[m]标记，作为半成品处理
+                                    actual_name = req_name[3:]
+                                    mat = self.db_manager.get_material_by_name(actual_name)
+                                    if mat:
+                                        self.db_manager.add_recipe_requirement('material', material_id, 'material', mat['id'], qty)
+                                    else:
+                                        # 如果半成品不存在，跳过或报错
+                                        result['errors'].append(f"第{idx+2}行: 半成品'{actual_name}'不存在")
+                                else:
+                                    # 只允许原材料作为半成品成分
                                     base = self.db_manager.get_base_material_by_name(req_name)
-                                self.db_manager.add_recipe_requirement('material', material_id, 'base', base['id'], qty)
+                                    if not base:
+                                        # 自动添加原材料
+                                        base_id = self.db_manager.add_base_material(req_name, None)
+                                        base = self.db_manager.get_base_material_by_name(req_name)
+                                    self.db_manager.add_recipe_requirement('material', material_id, 'base', base['id'], qty)
                             result['imported_counts']['materials'] += 1
                         elif item_type == '成品':
                             existing = self.db_manager.get_product_by_name(name)
@@ -75,16 +86,27 @@ class CSVImporter:
                             product_id = self.db_manager.add_product(name, 1, None)
                             reqs = self._parse_requirements(requirements_str)
                             for req_name, qty in reqs:
-                                # 先查半成品，再查原材料
-                                mat = self.db_manager.get_material_by_name(req_name)
-                                if mat:
-                                    self.db_manager.add_recipe_requirement('product', product_id, 'material', mat['id'], qty)
+                                # 检查是否有半成品标记[m]
+                                if req_name.startswith('[m]'):
+                                    # 去掉[m]标记，作为半成品处理
+                                    actual_name = req_name[3:]
+                                    mat = self.db_manager.get_material_by_name(actual_name)
+                                    if mat:
+                                        self.db_manager.add_recipe_requirement('product', product_id, 'material', mat['id'], qty)
+                                    else:
+                                        # 如果半成品不存在，跳过或报错
+                                        result['errors'].append(f"第{idx+2}行: 半成品'{actual_name}'不存在")
                                 else:
-                                    base = self.db_manager.get_base_material_by_name(req_name)
-                                    if not base:
-                                        base_id = self.db_manager.add_base_material(req_name, None)
+                                    # 先查半成品，再查原材料
+                                    mat = self.db_manager.get_material_by_name(req_name)
+                                    if mat:
+                                        self.db_manager.add_recipe_requirement('product', product_id, 'material', mat['id'], qty)
+                                    else:
                                         base = self.db_manager.get_base_material_by_name(req_name)
-                                    self.db_manager.add_recipe_requirement('product', product_id, 'base', base['id'], qty)
+                                        if not base:
+                                            base_id = self.db_manager.add_base_material(req_name, None)
+                                            base = self.db_manager.get_base_material_by_name(req_name)
+                                        self.db_manager.add_recipe_requirement('product', product_id, 'base', base['id'], qty)
                             result['imported_counts']['products'] += 1
                         else:
                             # 其它类型视为原材料

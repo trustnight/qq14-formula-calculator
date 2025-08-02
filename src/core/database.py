@@ -36,9 +36,16 @@ class DatabaseManager:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT UNIQUE NOT NULL,
                     description TEXT,
+                    cost REAL DEFAULT 0.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            
+            # 检查并添加cost字段（用于数据库迁移）
+            cursor.execute("PRAGMA table_info(base_materials)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'cost' not in columns:
+                cursor.execute('ALTER TABLE base_materials ADD COLUMN cost REAL DEFAULT 0.0')
             
             # 创建半成品表
             cursor.execute('''
@@ -47,9 +54,16 @@ class DatabaseManager:
                     name TEXT UNIQUE NOT NULL,
                     output_quantity INTEGER DEFAULT 1,
                     description TEXT,
+                    price REAL DEFAULT 0.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            
+            # 检查并添加price字段（用于数据库迁移）
+            cursor.execute("PRAGMA table_info(materials)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'price' not in columns:
+                cursor.execute('ALTER TABLE materials ADD COLUMN price REAL DEFAULT 0.0')
             
             # 创建成品表
             cursor.execute('''
@@ -58,9 +72,16 @@ class DatabaseManager:
                     name TEXT UNIQUE NOT NULL,
                     output_quantity INTEGER DEFAULT 1,
                     description TEXT,
+                    price REAL DEFAULT 0.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            
+            # 检查并添加price字段（用于数据库迁移）
+            cursor.execute("PRAGMA table_info(products)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'price' not in columns:
+                cursor.execute('ALTER TABLE products ADD COLUMN price REAL DEFAULT 0.0')
             
             # 创建配方需求表
             cursor.execute('''
@@ -72,6 +93,16 @@ class DatabaseManager:
                     ingredient_id INTEGER NOT NULL,
                     quantity REAL NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # 创建设置表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
@@ -89,13 +120,13 @@ class DatabaseManager:
             conn.commit()
     
     # 原材料操作
-    def add_base_material(self, name: str, description: str = None) -> int:
+    def add_base_material(self, name: str, description: str = None, cost: float = 0) -> int:
         """添加原材料"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'INSERT INTO base_materials (name, description) VALUES (?, ?)',
-                (name, description)
+                'INSERT INTO base_materials (name, description, cost) VALUES (?, ?, ?)',
+                (name, description, cost)
             )
             conn.commit()
             return cursor.lastrowid
@@ -123,24 +154,24 @@ class DatabaseManager:
             row = cursor.fetchone()
             return dict(row) if row else None
     
-    def update_base_material(self, material_id: int, name: str, description: str = None):
-        """更新原材料名称和描述"""
+    def update_base_material(self, material_id: int, name: str, description: str = None, cost: float = 0):
+        """更新原材料名称、描述和单价"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'UPDATE base_materials SET name = ?, description = ? WHERE id = ?',
-                (name, description, material_id)
+                'UPDATE base_materials SET name = ?, description = ?, cost = ? WHERE id = ?',
+                (name, description, cost, material_id)
             )
             conn.commit()
     
     # 半成品操作
-    def add_material(self, name: str, output_quantity: int = 1, description: str = None) -> int:
+    def add_material(self, name: str, output_quantity: int = 1, description: str = None, price: float = 0.0) -> int:
         """添加半成品"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'INSERT INTO materials (name, output_quantity, description) VALUES (?, ?, ?)',
-                (name, output_quantity, description)
+                'INSERT INTO materials (name, output_quantity, description, price) VALUES (?, ?, ?, ?)',
+                (name, output_quantity, description, price)
             )
             conn.commit()
             return cursor.lastrowid
@@ -168,24 +199,24 @@ class DatabaseManager:
             row = cursor.fetchone()
             return dict(row) if row else None
     
-    def update_material(self, material_id: int, name: str, output_quantity: int = 1, description: str = None):
+    def update_material(self, material_id: int, name: str, output_quantity: int = 1, description: str = None, price: float = 0.0):
         """更新半成品"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'UPDATE materials SET name = ?, output_quantity = ?, description = ? WHERE id = ?',
-                (name, output_quantity, description, material_id)
+                'UPDATE materials SET name = ?, output_quantity = ?, description = ?, price = ? WHERE id = ?',
+                (name, output_quantity, description, price, material_id)
             )
             conn.commit()
     
     # 成品操作
-    def add_product(self, name: str, output_quantity: int = 1, description: str = None) -> int:
+    def add_product(self, name: str, output_quantity: int = 1, description: str = None, price: float = 0.0) -> int:
         """添加成品"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'INSERT INTO products (name, output_quantity, description) VALUES (?, ?, ?)',
-                (name, output_quantity, description)
+                'INSERT INTO products (name, output_quantity, description, price) VALUES (?, ?, ?, ?)',
+                (name, output_quantity, description, price)
             )
             conn.commit()
             return cursor.lastrowid
@@ -213,13 +244,13 @@ class DatabaseManager:
             row = cursor.fetchone()
             return dict(row) if row else None
     
-    def update_product(self, product_id: int, name: str, output_quantity: int = 1, description: str = None):
+    def update_product(self, product_id: int, name: str, output_quantity: int = 1, description: str = None, price: float = 0.0):
         """更新成品"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'UPDATE products SET name = ?, output_quantity = ?, description = ? WHERE id = ?',
-                (name, output_quantity, description, product_id)
+                'UPDATE products SET name = ?, output_quantity = ?, description = ?, price = ? WHERE id = ?',
+                (name, output_quantity, description, price, product_id)
             )
             conn.commit()
     
@@ -342,30 +373,107 @@ class DatabaseManager:
     
     def get_data_statistics(self) -> Dict[str, int]:
         """获取数据统计信息"""
-        stats = {
-            'base_materials': 0,
-            'materials': 0,
-            'products': 0,
-            'recipe_requirements': 0
-        }
-        
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # 统计原材料数量
+            # 统计各类数据数量
             cursor.execute('SELECT COUNT(*) FROM base_materials')
-            stats['base_materials'] = cursor.fetchone()[0]
+            base_count = cursor.fetchone()[0]
             
-            # 统计半成品数量
             cursor.execute('SELECT COUNT(*) FROM materials')
-            stats['materials'] = cursor.fetchone()[0]
+            material_count = cursor.fetchone()[0]
             
-            # 统计成品数量
             cursor.execute('SELECT COUNT(*) FROM products')
-            stats['products'] = cursor.fetchone()[0]
+            product_count = cursor.fetchone()[0]
             
-            # 统计配方需求数量
             cursor.execute('SELECT COUNT(*) FROM recipe_requirements')
-            stats['recipe_requirements'] = cursor.fetchone()[0]
+            recipe_count = cursor.fetchone()[0]
+            
+        stats = {
+            'base_materials': base_count,
+            'materials': material_count,
+            'products': product_count,
+            'recipes': recipe_count
+        }
         
         return stats
+    
+    def get_recipes_using_ingredient(self, ingredient_type: str, ingredient_id: int) -> List[Dict[str, Any]]:
+        """获取使用指定原材料或半成品的配方列表"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # 查询使用该原料的配方
+            cursor.execute('''
+                SELECT DISTINCT rr.recipe_type, rr.recipe_id, rr.quantity
+                FROM recipe_requirements rr
+                WHERE rr.ingredient_type = ? AND rr.ingredient_id = ?
+                ORDER BY rr.recipe_type, rr.recipe_id
+            ''', (ingredient_type, ingredient_id))
+            
+            recipe_refs = cursor.fetchall()
+            recipes = []
+            
+            for recipe_ref in recipe_refs:
+                recipe_type = recipe_ref['recipe_type']
+                recipe_id = recipe_ref['recipe_id']
+                quantity_needed = recipe_ref['quantity']
+                
+                # 根据配方类型获取配方详情
+                if recipe_type == 'material':
+                    cursor.execute('SELECT * FROM materials WHERE id = ?', (recipe_id,))
+                    recipe_data = cursor.fetchone()
+                    if recipe_data:
+                        recipes.append({
+                            'type': '半成品',
+                            'name': recipe_data['name'],
+                            'output_quantity': recipe_data['output_quantity'],
+                            'quantity_needed': quantity_needed,
+                            'recipe_type': recipe_type,
+                            'recipe_id': recipe_id
+                        })
+                elif recipe_type == 'product':
+                    cursor.execute('SELECT * FROM products WHERE id = ?', (recipe_id,))
+                    recipe_data = cursor.fetchone()
+                    if recipe_data:
+                        recipes.append({
+                            'type': '成品',
+                            'name': recipe_data['name'],
+                            'output_quantity': recipe_data['output_quantity'],
+                            'quantity_needed': quantity_needed,
+                            'recipe_type': recipe_type,
+                            'recipe_id': recipe_id
+                        })
+            
+            return recipes
+    
+    # 设置操作
+    def set_setting(self, key: str, value: str):
+        """设置配置项"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+                (key, value)
+            )
+            conn.commit()
+    
+    def get_setting(self, key: str, default_value: str = None) -> str:
+        """获取配置项"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
+            row = cursor.fetchone()
+            return row[0] if row else default_value
+    
+    def get_tax_rate(self) -> float:
+        """获取交易税率"""
+        tax_rate_str = self.get_setting('tax_rate', '5.0')
+        try:
+            return float(tax_rate_str)
+        except ValueError:
+            return 5.0
+    
+    def set_tax_rate(self, tax_rate: float):
+        """设置交易税率"""
+        self.set_setting('tax_rate', str(tax_rate))

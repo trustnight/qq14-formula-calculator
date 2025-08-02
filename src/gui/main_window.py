@@ -55,16 +55,16 @@ def get_icon_path(item_name, item_type=None):
     # item_type: 'product'/'material'/'base'，优先用类型目录
     if item_type in ICON_SUBDIRS:
         path = resource_path(os.path.join(ICON_SUBDIRS[item_type], f"{item_name}.png"))
-        if path:
+        if os.path.exists(path):
             return path
     # 兼容旧目录
     path = resource_path(os.path.join('icon', f"{item_name}.png"))
-    if path:
+    if os.path.exists(path):
         return path
     # 全部子目录兜底查找
     for sub in ICON_SUBDIRS.values():
         path = resource_path(os.path.join(sub, f"{item_name}.png"))
-        if path:
+        if os.path.exists(path):
             return path
     return None
 
@@ -95,6 +95,7 @@ def get_item_icon_item(item_name: str, item_type: str = None, icon_size: int = 1
     if base_icon:
         item.setIcon(base_icon)
     return item
+
 class CustomQuantityWidget(QWidget):
     """自定义数量输入控件，包含-10、-1、+1、+10按钮"""
     
@@ -648,6 +649,28 @@ class MaterialAddDialog(QDialog):
         QMessageBox.information(self, "成功", f"已添加半成品: {name}")
         self.accept()
 
+
+        self.table.setRowCount(len(materials))
+        for row, m in enumerate(materials):
+            self.table.setItem(row, 0, QTableWidgetItem(str(m['id'])))
+            self.table.setItem(row, 1, QTableWidgetItem(m['name']))
+            cost_item = QTableWidgetItem(str(m.get('cost', 0)))
+            cost_item.setFlags(cost_item.flags() | Qt.ItemIsEditable)
+            self.table.setItem(row, 2, cost_item)
+
+    def save(self):
+        for row in range(self.table.rowCount()):
+            material_id = int(self.table.item(row, 0).text())
+            name = self.table.item(row, 1).text()
+            try:
+                cost = float(self.table.item(row, 2).text())
+            except Exception:
+                cost = 0
+            m = self.db_manager.get_base_material_by_id(material_id)
+            self.db_manager.update_base_material(material_id, name, m.get('description', ''), cost)
+        QMessageBox.information(self, "提示", "保存成功！")
+        self.accept()
+
 class RecipeEditDialog(QDialog):
     def __init__(self, parent, db_manager, title="添加配方", name_label="配方名称", initial_name="", initial_quantity=1, edit_id=None, edit_type=None):
         super().__init__(parent)
@@ -893,6 +916,9 @@ class RecipeEditDialog(QDialog):
                     self.db_manager.add_recipe_requirement(item_type, item_id, 'material', material['id'], req_quantity)
         QMessageBox.information(self, "成功", f"已保存{self.name_label[:-2]}: {name}")
         self.accept()
+    def open_cost_edit(self):
+        dlg = MaterialCostEditDialog(self.db_manager, self)
+        dlg.exec()
 
 class DataMigrator:
     """数据迁移器"""
@@ -1442,10 +1468,12 @@ class FFXIVCalculatorWindow(QMainWindow):
         else:
             self.result_table = QTableWidget()
         
-        self.result_table.setColumnCount(2)
-        self.result_table.setHorizontalHeaderLabels(["材料名称", "需要数量"])
-        # 设置列宽 - 让最后一列自动拉伸填满
+        self.result_table.setColumnCount(4)
+        self.result_table.setHorizontalHeaderLabels(["材料名称", "需要数量", "单价", "小计"])
+        # 设置列宽
         self.result_table.setColumnWidth(0, 200)  # 材料名称列
+        self.result_table.setColumnWidth(1, 80)   # 需要数量列
+        self.result_table.setColumnWidth(2, 80)   # 单价列
         self.result_table.horizontalHeader().setStretchLastSection(True)  # 让最后一列拉伸填满
         self.result_table.setEditTriggers(QTableWidget.NoEditTriggers)
         layout.addWidget(self.result_table)
@@ -1459,8 +1487,8 @@ class FFXIVCalculatorWindow(QMainWindow):
         
         self.recipe_tree.setHeaderLabels(["物品名称", "数量", "类型"])
         self.recipe_tree.setColumnWidth(0, 200)
-        self.recipe_tree.setColumnWidth(1, 80)
-        self.recipe_tree.setColumnWidth(2, 80)
+        self.recipe_tree.setColumnWidth(1, 100)  # 增加数量列宽度以便更好显示居中对齐
+        self.recipe_tree.setColumnWidth(2, 100)  # 增加类型列宽度以便更好显示居中对齐
         layout.addWidget(self.recipe_tree)
         
         return widget
@@ -1546,6 +1574,25 @@ class FFXIVCalculatorWindow(QMainWindow):
         self.export_recipe_btn.clicked.connect(self.on_export_recipe_clicked)
         self.export_recipe_btn.setFixedWidth(100)
         layout.addWidget(self.export_recipe_btn)
+        
+        # 市场售价按钮
+        if FLUENT_AVAILABLE:
+            self.market_price_btn = PushButton("市场售价")
+        else:
+            self.market_price_btn = QPushButton("市场售价")
+        self.market_price_btn.clicked.connect(self.open_market_price_dialog)
+        self.market_price_btn.setFixedWidth(100)
+        layout.addWidget(self.market_price_btn)
+        
+        # 配方反查按钮
+        if FLUENT_AVAILABLE:
+            self.reverse_lookup_btn = PushButton("配方反查")
+        else:
+            self.reverse_lookup_btn = QPushButton("配方反查")
+        self.reverse_lookup_btn.clicked.connect(self.open_reverse_lookup_dialog)
+        self.reverse_lookup_btn.setFixedWidth(100)
+        layout.addWidget(self.reverse_lookup_btn)
+        
         layout.addStretch()
         return widget
     
@@ -2024,16 +2071,56 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
         debug_log(f"[on_calculation_finished] result={result}")
         self.calculate_button.setEnabled(True)
         self.calculate_button.setText("计算材料需求")
-        requirements = result.get('requirements', [])
+        
+        # 处理新的数据格式
+        if isinstance(result.get('requirements'), dict) and 'requirements' in result.get('requirements', {}):
+            # 新格式：包含requirements和total_cost
+            calc_result = result['requirements']
+            requirements = calc_result.get('requirements', [])
+            total_cost = calc_result.get('total_cost', 0)
+        else:
+            # 兼容旧格式
+            requirements = result.get('requirements', [])
+            total_cost = 0
+            
         self.result_table.setRowCount(len(requirements))
         icon_size = self.result_table.verticalHeader().defaultSectionSize()
+        
         for i, req in enumerate(requirements):
             # 传入req['type']
             icon_item = get_item_icon_item(req['name'], item_type=req.get('type', 'base'), icon_size=icon_size)
             self.result_table.setItem(i, 0, icon_item)
             self.result_table.setRowHeight(i, icon_size)
-            self.result_table.setItem(i, 1, QTableWidgetItem(str(int(float(req['quantity'])))))
+            # 设置数量列并居中对齐
+            quantity_item = QTableWidgetItem(str(int(float(req['quantity']))))
+            quantity_item.setTextAlignment(Qt.AlignCenter)
+            self.result_table.setItem(i, 1, quantity_item)
+            
+            # 添加单价和小计列，并设置居中对齐
+            cost = req.get('cost', 0)
+            total_item_cost = req.get('total_cost', 0)
+            
+            cost_item = QTableWidgetItem(f"{cost:.2f}")
+            cost_item.setTextAlignment(Qt.AlignCenter)
+            self.result_table.setItem(i, 2, cost_item)
+            
+            total_cost_item = QTableWidgetItem(f"{total_item_cost:.2f}")
+            total_cost_item.setTextAlignment(Qt.AlignCenter)
+            self.result_table.setItem(i, 3, total_cost_item)
+            
         self.result_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        
+        # 计算单件利润
+        profit_info = self.calculate_profit(total_cost)
+        
+        # 更新结果标题显示总成本和利润
+        if total_cost > 0:
+            if profit_info:
+                self.result_label.setText(f"计算结果 - 总成本: {total_cost:.2f} | 单件利润: {profit_info['profit']:.2f} (售价: {profit_info['selling_price']:.2f}, 税率: {profit_info['tax_rate']:.1f}%)")
+            else:
+                self.result_label.setText(f"计算结果 - 总成本: {total_cost:.2f}")
+        else:
+            self.result_label.setText("计算结果")
         # 重新从表格获取已选配方，保证分解树和计算一致
         items = []
         type_map = {'成品': 'product', '半成品': 'material'}
@@ -2093,12 +2180,15 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
             'product': '成品'
         }
         type_text = item_type_map.get(item_type, item_type)
-        # 名称加数量
-        show_name = f"{item_name} x{self.format_number(quantity)}"
+        # 分别设置名称、数量、类型三列
         icon_item = get_item_icon_item(item_name, item_type=item_type, icon_size=24)
-        tree_item = QTreeWidgetItem([show_name, type_text])
+        tree_item = QTreeWidgetItem([item_name, str(self.format_number(quantity)), type_text])
         if icon_item.icon().isNull() is False:
             tree_item.setIcon(0, icon_item.icon())
+        
+        # 设置数量列和类型列居中对齐
+        tree_item.setTextAlignment(1, Qt.AlignCenter)  # 数量列居中
+        tree_item.setTextAlignment(2, Qt.AlignCenter)  # 类型列居中
         for child in data.get('children', []):
             child_item = self.create_tree_item(child)
             tree_item.addChild(child_item)
@@ -2248,6 +2338,9 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
                 self.db_manager.delete_product(item_id)
             elif item_type == 'base':
                 self.db_manager.delete_base_material(item_id)
+            # 删除后刷新界面
+            self.refresh_item_list()
+            self.refresh_recipe_list()
         except Exception as e:
             debug_log(f"delete_recipe error: {e}")
     
@@ -2392,6 +2485,83 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
                 QMessageBox.warning(self, "警告", message)
             else:
                 QMessageBox.information(self, "信息", message)
+    
+    def open_market_price_dialog(self):
+        """打开市场售价编辑对话框"""
+        try:
+            dialog = MarketPriceDialog(self, self.db_manager)
+            if dialog.exec() == QDialog.Accepted:
+                self.show_message("售价更新成功！", "success")
+            else:
+                self.show_message("售价编辑已取消", "info")
+        except Exception as e:
+            self.show_message(f"打开售价编辑对话框失败: {str(e)}", "error")
+    
+    def open_reverse_lookup_dialog(self):
+        """打开配方反查对话框"""
+        try:
+            dialog = ReverseLookupDialog(self, self.db_manager)
+            dialog.exec()
+        except Exception as e:
+            self.show_message(f"打开配方反查对话框失败: {str(e)}", "error")
+    
+    def calculate_profit(self, total_cost):
+        """计算单件利润"""
+        try:
+            # 获取选中的第一个物品（假设只计算一个物品的利润）
+            if self.selected_table.rowCount() == 0:
+                return None
+            
+            # 获取第一行的物品信息
+            name_item = self.selected_table.item(0, 0)
+            type_item = self.selected_table.item(0, 1)
+            quantity_widget = self.selected_table.cellWidget(0, 2)
+            
+            if not (name_item and type_item and quantity_widget):
+                return None
+            
+            item_name = name_item.text().strip()
+            item_type_text = type_item.text().strip()
+            quantity = quantity_widget.value()
+            
+            # 确定物品类型
+            if item_type_text == "成品":
+                item_type = "product"
+                items = self.db_manager.get_products()
+            elif item_type_text == "半成品":
+                item_type = "material"
+                items = self.db_manager.get_materials()
+            else:
+                return None
+            
+            # 查找物品的售价
+            item_price = 0.0
+            for item in items:
+                if item['name'] == item_name:
+                    item_price = item.get('price', 0.0)
+                    break
+            
+            if item_price <= 0:
+                return None
+            
+            # 获取税率（从设置中获取，默认5%）
+            tax_rate = getattr(self, 'market_tax_rate', 5.0)
+            
+            # 计算单件利润：售价 * (1 - 税率) - 单件成本
+            single_item_cost = total_cost / quantity if quantity > 0 else total_cost
+            selling_price_after_tax = item_price * (1 - tax_rate / 100)
+            profit = selling_price_after_tax - single_item_cost
+            
+            return {
+                'profit': profit,
+                'selling_price': item_price,
+                'tax_rate': tax_rate,
+                'cost_per_item': single_item_cost
+            }
+            
+        except Exception as e:
+            debug_log(f"计算利润失败: {str(e)}")
+            return None
     
     def filter_recipe_list(self):
         """过滤配方列表"""
@@ -2643,14 +2813,21 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
             for req in requirements:
                 if req['ingredient_type'] == 'base':
                     ingredient = self.db_manager.get_base_material_by_id(req['ingredient_id'])
+                    if ingredient:
+                        quantity = int(req['quantity'])
+                        if quantity == 1:
+                            all_reqs.append(ingredient['name'])
+                        else:
+                            all_reqs.append(f"{ingredient['name']}({quantity})")
                 else:
                     ingredient = self.db_manager.get_material_by_id(req['ingredient_id'])
-                if ingredient:
-                    quantity = int(req['quantity'])
-                    if quantity == 1:
-                        all_reqs.append(ingredient['name'])
-                    else:
-                        all_reqs.append(f"{ingredient['name']}({quantity})")
+                    if ingredient:
+                        quantity = int(req['quantity'])
+                        # 为半成品添加[m]标记
+                        if quantity == 1:
+                            all_reqs.append(f"[m]{ingredient['name']}")
+                        else:
+                            all_reqs.append(f"[m]{ingredient['name']}({quantity})")
             recipes.append({
                 '物品名称': material['name'],
                 '物品类型': '半成品',
@@ -2665,14 +2842,21 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
             for req in requirements:
                 if req['ingredient_type'] == 'base':
                     ingredient = self.db_manager.get_base_material_by_id(req['ingredient_id'])
+                    if ingredient:
+                        quantity = int(req['quantity'])
+                        if quantity == 1:
+                            all_reqs.append(ingredient['name'])
+                        else:
+                            all_reqs.append(f"{ingredient['name']}({quantity})")
                 else:
                     ingredient = self.db_manager.get_material_by_id(req['ingredient_id'])
-                if ingredient:
-                    quantity = int(req['quantity'])
-                    if quantity == 1:
-                        all_reqs.append(ingredient['name'])
-                    else:
-                        all_reqs.append(f"{ingredient['name']}({quantity})")
+                    if ingredient:
+                        quantity = int(req['quantity'])
+                        # 为半成品添加[m]标记
+                        if quantity == 1:
+                            all_reqs.append(f"[m]{ingredient['name']}")
+                        else:
+                            all_reqs.append(f"[m]{ingredient['name']}({quantity})")
             recipes.append({
                 '物品名称': product['name'],
                 '物品类型': '成品',
@@ -3121,6 +3305,429 @@ class SearchableDropdown(QFrame):
             if next_widget is not self.list_widget:
                 self.hide_popup()
         return super().eventFilter(obj, event)
+
+
+class ReverseLookupDialog(QDialog):
+    """配方反查对话框"""
+    
+    def __init__(self, parent=None, db_manager=None):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.setWindowTitle("配方反查")
+        self.setModal(True)
+        self.resize(800, 600)
+        self.init_ui()
+        self.load_items()
+    
+    def init_ui(self):
+        """初始化界面"""
+        layout = QVBoxLayout(self)
+        
+        # 搜索区域
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel("搜索物品:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("输入物品名称...")
+        self.search_edit.textChanged.connect(self.filter_items)
+        search_layout.addWidget(self.search_edit)
+        layout.addLayout(search_layout)
+        
+        # 筛选区域
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("筛选类型:"))
+        self.base_checkbox = QCheckBox("原材料")
+        self.base_checkbox.setChecked(True)
+        self.base_checkbox.stateChanged.connect(self.filter_items)
+        filter_layout.addWidget(self.base_checkbox)
+        
+        self.material_checkbox = QCheckBox("半成品")
+        self.material_checkbox.setChecked(True)
+        self.material_checkbox.stateChanged.connect(self.filter_items)
+        filter_layout.addWidget(self.material_checkbox)
+        
+        filter_layout.addStretch()
+        layout.addLayout(filter_layout)
+        
+        # 物品列表
+        layout.addWidget(QLabel("选择物品:"))
+        self.items_table = QTableWidget()
+        self.items_table.setColumnCount(3)
+        self.items_table.setHorizontalHeaderLabels(["图标", "名称", "类型"])
+        self.items_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.items_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.items_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
+        self.items_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.items_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.items_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.items_table.itemSelectionChanged.connect(self.on_item_selected)
+        layout.addWidget(self.items_table)
+        
+        # 结果区域
+        layout.addWidget(QLabel("可制作的配方:"))
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(4)
+        self.result_table.setHorizontalHeaderLabels(["配方名称", "类型", "产出数量", "需要数量"])
+        self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.result_table.verticalHeader().setDefaultSectionSize(TABLE_ROW_HEIGHT)
+        self.result_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.result_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.result_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.result_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        layout.addWidget(self.result_table)
+        
+        # 按钮区域
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.close)
+        button_layout.addWidget(close_btn)
+        layout.addLayout(button_layout)
+    
+    def load_items(self):
+        """加载所有物品"""
+        self.all_items = []
+        
+        # 加载原材料
+        base_materials = self.db_manager.get_base_materials()
+        for item in base_materials:
+            self.all_items.append({
+                'id': item['id'],
+                'name': item['name'],
+                'type': '原材料',
+                'db_type': 'base_material'
+            })
+        
+        # 加载半成品
+        materials = self.db_manager.get_materials()
+        for item in materials:
+            self.all_items.append({
+                'id': item['id'],
+                'name': item['name'],
+                'type': '半成品',
+                'db_type': 'material'
+            })
+        
+        self.display_items()
+    
+    def display_items(self):
+        """显示物品列表"""
+        # 获取筛选条件
+        search_text = self.search_edit.text().lower()
+        show_base = self.base_checkbox.isChecked()
+        show_material = self.material_checkbox.isChecked()
+        
+        # 筛选物品
+        filtered_items = []
+        for item in self.all_items:
+            if search_text and search_text not in item['name'].lower():
+                continue
+            if item['type'] == '原材料' and not show_base:
+                continue
+            if item['type'] == '半成品' and not show_material:
+                continue
+            filtered_items.append(item)
+        
+        # 显示物品
+        self.items_table.setRowCount(len(filtered_items))
+        for row, item in enumerate(filtered_items):
+            # 图标
+            icon_type = 'base' if item['type'] == '原材料' else 'material'
+            icon_item = get_item_icon_item(item['name'], icon_type, 32)
+            icon_item.setToolTip(item['name'])
+            self.items_table.setItem(row, 0, icon_item)
+            
+            # 名称
+            name_item = QTableWidgetItem(item['name'])
+            name_item.setData(Qt.UserRole, item)
+            self.items_table.setItem(row, 1, name_item)
+            
+            # 类型
+            type_item = QTableWidgetItem(item['type'])
+            self.items_table.setItem(row, 2, type_item)
+    
+    def filter_items(self):
+        """筛选物品"""
+        self.display_items()
+    
+    def on_item_selected(self):
+        """物品选择变化"""
+        current_row = self.items_table.currentRow()
+        if current_row >= 0:
+            name_item = self.items_table.item(current_row, 1)
+            if name_item:
+                item_data = name_item.data(Qt.UserRole)
+                self.load_recipes_for_item(item_data)
+    
+    def load_recipes_for_item(self, item_data):
+        """加载使用指定物品的配方"""
+        # 转换数据库类型参数
+        ingredient_type = 'base' if item_data['db_type'] == 'base_material' else 'material'
+        recipes = self.db_manager.get_recipes_using_ingredient(ingredient_type, item_data['id'])
+        
+        self.result_table.setRowCount(len(recipes))
+        for row, recipe in enumerate(recipes):
+            # 配方名称
+            name_item = QTableWidgetItem(recipe['name'])
+            self.result_table.setItem(row, 0, name_item)
+            
+            # 类型
+            type_item = QTableWidgetItem(recipe['type'])
+            self.result_table.setItem(row, 1, type_item)
+            
+            # 产出数量
+            output_item = QTableWidgetItem(str(recipe['output_quantity']))
+            self.result_table.setItem(row, 2, output_item)
+            
+            # 需要数量
+            needed_item = QTableWidgetItem(str(recipe['quantity_needed']))
+            self.result_table.setItem(row, 3, needed_item)
+
+
+class MarketPriceDialog(QDialog):
+    """市场售价编辑对话框"""
+    
+    def __init__(self, parent, db_manager):
+        super().__init__(parent)
+        self.db_manager = db_manager
+        self.setWindowTitle("市场售价编辑")
+        self.setMinimumSize(800, 600)
+        self.resize(900, 700)
+        self.tax_rate = self.db_manager.get_tax_rate()  # 从数据库加载税率
+        self.init_ui()
+        self.load_data()
+    
+    def init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout(self)
+        
+        # 交易税设置
+        tax_layout = QHBoxLayout()
+        tax_layout.addWidget(QLabel("交易税率(%):"))
+        self.tax_spinbox = QSpinBox()
+        self.tax_spinbox.setRange(0, 50)
+        self.tax_spinbox.setValue(int(self.tax_rate))
+        self.tax_spinbox.setSuffix("%")
+        self.tax_spinbox.valueChanged.connect(self.on_tax_rate_changed)
+        tax_layout.addWidget(self.tax_spinbox)
+        tax_layout.addStretch()
+        layout.addLayout(tax_layout)
+        
+        # 搜索框
+        search_layout = QHBoxLayout()
+        search_layout.addWidget(QLabel("搜索:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("输入物品名称进行搜索...")
+        self.search_edit.textChanged.connect(self.filter_items)
+        search_layout.addWidget(self.search_edit)
+        layout.addLayout(search_layout)
+        
+        # 筛选复选框
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("筛选:"))
+        self.base_material_checkbox = QCheckBox("原材料")
+        self.base_material_checkbox.setChecked(True)
+        self.base_material_checkbox.stateChanged.connect(self.filter_items)
+        filter_layout.addWidget(self.base_material_checkbox)
+        
+        self.material_checkbox = QCheckBox("半成品")
+        self.material_checkbox.setChecked(True)
+        self.material_checkbox.stateChanged.connect(self.filter_items)
+        filter_layout.addWidget(self.material_checkbox)
+        
+        self.product_checkbox = QCheckBox("成品")
+        self.product_checkbox.setChecked(True)
+        self.product_checkbox.stateChanged.connect(self.filter_items)
+        filter_layout.addWidget(self.product_checkbox)
+        
+        filter_layout.addStretch()
+        layout.addLayout(filter_layout)
+        
+        # 物品表格
+        self.items_table = QTableWidget()
+        self.items_table.setColumnCount(4)
+        self.items_table.setHorizontalHeaderLabels(["物品名称", "类型", "当前售价", "新售价"])
+        self.items_table.horizontalHeader().setStretchLastSection(True)
+        self.items_table.setColumnWidth(0, 150)
+        self.items_table.setColumnWidth(1, 150)
+        self.items_table.setColumnWidth(2, 120)
+        self.items_table.setColumnWidth(3, 120)
+        layout.addWidget(self.items_table)
+        
+        # 按钮
+        button_layout = QHBoxLayout()
+        self.save_btn = QPushButton("保存")
+        self.save_btn.clicked.connect(self.save_prices)
+        self.cancel_btn = QPushButton("取消")
+        self.cancel_btn.clicked.connect(self.reject)
+        button_layout.addStretch()
+        button_layout.addWidget(self.save_btn)
+        button_layout.addWidget(self.cancel_btn)
+        layout.addLayout(button_layout)
+    
+    def on_tax_rate_changed(self, value):
+        """交易税率改变"""
+        self.tax_rate = float(value)
+        # 保存到数据库
+        self.db_manager.set_tax_rate(self.tax_rate)
+    
+    def load_data(self):
+        """加载数据"""
+        try:
+            # 获取所有原材料、半成品和成品
+            base_materials = self.db_manager.get_base_materials()
+            materials = self.db_manager.get_materials()
+            products = self.db_manager.get_products()
+            
+            all_items = []
+            
+            # 添加原材料
+            for base_material in base_materials:
+                all_items.append({
+                    'id': base_material['id'],
+                    'name': base_material['name'],
+                    'type': '原材料',
+                    'item_type': 'base_material',
+                    'price': base_material.get('price', 0.0)
+                })
+            
+            # 添加半成品
+            for material in materials:
+                all_items.append({
+                    'id': material['id'],
+                    'name': material['name'],
+                    'type': '半成品',
+                    'item_type': 'material',
+                    'price': material.get('price', 0.0)
+                })
+            
+            # 添加成品
+            for product in products:
+                all_items.append({
+                    'id': product['id'],
+                    'name': product['name'],
+                    'type': '成品',
+                    'item_type': 'product',
+                    'price': product.get('price', 0.0)
+                })
+            
+            self.all_items = all_items
+            self.display_items(all_items)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载数据失败: {str(e)}")
+    
+    def display_items(self, items):
+        """显示物品列表"""
+        self.items_table.setRowCount(len(items))
+        
+        for row, item in enumerate(items):
+            # 图标（包含物品名称作为tooltip）
+            icon_type = 'base' if item['item_type'] == 'base_material' else item['item_type']
+            icon_item = get_item_icon_item(item['name'], item_type=icon_type, icon_size=32)
+            icon_item.setToolTip(item['name'])  # 鼠标悬停显示物品名称
+            icon_item.setData(Qt.UserRole, item)
+            self.items_table.setItem(row, 0, icon_item)
+            
+            # 类型
+            type_item = QTableWidgetItem(item['type'])
+            type_item.setTextAlignment(Qt.AlignCenter)
+            self.items_table.setItem(row, 1, type_item)
+            
+            # 当前售价
+            current_price_item = QTableWidgetItem(f"{item['price']:.2f}")
+            current_price_item.setTextAlignment(Qt.AlignCenter)
+            self.items_table.setItem(row, 2, current_price_item)
+            
+            # 新售价（可编辑）
+            new_price_item = QTableWidgetItem(f"{item['price']:.2f}")
+            new_price_item.setTextAlignment(Qt.AlignCenter)
+            self.items_table.setItem(row, 3, new_price_item)
+    
+    def filter_items(self):
+        """过滤物品"""
+        keyword = self.search_edit.text().lower()
+        
+        # 根据复选框状态筛选类型
+        allowed_types = []
+        if self.base_material_checkbox.isChecked():
+            allowed_types.append('原材料')
+        if self.material_checkbox.isChecked():
+            allowed_types.append('半成品')
+        if self.product_checkbox.isChecked():
+            allowed_types.append('成品')
+        
+        # 如果没有选择任何类型，显示空列表
+        if not allowed_types:
+            self.display_items([])
+            return
+        
+        # 先按类型筛选
+        type_filtered_items = [item for item in self.all_items if item['type'] in allowed_types]
+        
+        # 再按关键词筛选
+        if keyword:
+            filtered_items = [item for item in type_filtered_items if keyword in item['name'].lower()]
+        else:
+            filtered_items = type_filtered_items
+        
+        self.display_items(filtered_items)
+    
+    def save_prices(self):
+        """保存售价"""
+        try:
+            updated_count = 0
+            for row in range(self.items_table.rowCount()):
+                icon_item = self.items_table.item(row, 0)
+                new_price_item = self.items_table.item(row, 3)
+                
+                if icon_item and new_price_item:
+                    item_data = icon_item.data(Qt.UserRole)
+                    item_id = item_data['id']
+                    item_type = item_data['item_type']
+                    
+                    try:
+                        new_price = float(new_price_item.text())
+                        # 更新数据库中的售价
+                        if item_type == 'base_material':
+                            # 获取原材料信息
+                            base_material = self.db_manager.get_base_material_by_id(item_id)
+                            if base_material:
+                                self.db_manager.update_base_material(
+                                    item_id, 
+                                    base_material['name'], 
+                                    new_price
+                                )
+                        elif item_type == 'material':
+                            # 获取半成品信息
+                            material = self.db_manager.get_material_by_id(item_id)
+                            if material:
+                                self.db_manager.update_material(
+                                    item_id, 
+                                    material['name'], 
+                                    material['output_quantity'], 
+                                    material.get('description'), 
+                                    new_price
+                                )
+                        elif item_type == 'product':
+                            # 获取成品信息
+                            product = self.db_manager.get_product_by_id(item_id)
+                            if product:
+                                self.db_manager.update_product(
+                                    item_id, 
+                                    product['name'], 
+                                    product['output_quantity'], 
+                                    product.get('description'), 
+                                    new_price
+                                )
+                        updated_count += 1
+                    except ValueError:
+                        continue
+            
+            QMessageBox.information(self, "成功", f"已更新 {updated_count} 个物品的售价")
+            self.accept()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存售价失败: {str(e)}")
 
 
 class SearchableComboBox(QComboBox):
