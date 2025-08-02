@@ -1,5 +1,10 @@
 # FFXIV 配方计算器
 
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![PySide6](https://img.shields.io/badge/PySide6-6.5.0+-green.svg)](https://pypi.org/project/PySide6/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/your-username/qq14-formula-calculator)
+
 # ⚠️ 重要声明 ⚠️
 
 ## <span style="color:red;font-size:2em">❗ 本工具部分内容由AI生成 ❗</span>
@@ -7,6 +12,20 @@
 ### <span style="color:red;font-size:1.5em">❗ 配方数据可能不完整，需要用户自行添加 ❗</span>
 
 一个用于《最终幻想XIV》的配方材料需求计算工具，支持复杂的多层级配方计算和批量管理。
+
+## 📋 系统要求
+
+- **Python**: 3.8 或更高版本
+- **操作系统**: Windows 10+, macOS 10.14+, Linux (Ubuntu 18.04+)
+- **内存**: 至少 4GB RAM
+- **存储空间**: 至少 100MB 可用空间
+
+## 🔧 依赖包
+
+- **PySide6**: 6.5.0+ (Qt界面框架)
+- **pandas**: 1.5.0+ (数据处理)
+- **openpyxl**: 3.1.0+ (Excel文件支持)
+- **PySide6-Fluent-Widgets**: 1.1.0+ (可选，现代化UI)
 
 ## 项目概述
 
@@ -285,3 +304,35 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 ## 许可证
 
 本项目仅供学习和个人使用。
+
+---
+
+## 📢 订阅和关注
+
+如果您觉得这个项目有用，请给我们一个 ⭐ Star！
+
+[![GitHub stars](https://img.shields.io/github/stars/your-username/qq14-formula-calculator?style=social)](https://github.com/your-username/qq14-formula-calculator)
+[![GitHub forks](https://img.shields.io/github/forks/your-username/qq14-formula-calculator?style=social)](https://github.com/your-username/qq14-formula-calculator)
+[![GitHub issues](https://img.shields.io/github/issues/your-username/qq14-formula-calculator)](https://github.com/your-username/qq14-formula-calculator/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/your-username/qq14-formula-calculator)](https://github.com/your-username/qq14-formula-calculator/pulls)
+
+### 🔔 关注更新
+
+- 📧 **邮件订阅**: [订阅项目更新](mailto:your-email@example.com?subject=订阅FFXIV配方计算器更新)
+- 🐦 **Twitter**: [@your-twitter-handle](https://twitter.com/your-twitter-handle)
+- 💬 **Discord**: [加入我们的Discord服务器](https://discord.gg/your-discord-invite)
+- 📱 **Telegram**: [Telegram频道](https://t.me/your-telegram-channel)
+
+### 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+[![Contributors](https://img.shields.io/github/contributors/your-username/qq14-formula-calculator)](https://github.com/your-username/qq14-formula-calculator/graphs/contributors)
+[![Last commit](https://img.shields.io/github/last-commit/your-username/qq14-formula-calculator)](https://github.com/your-username/qq14-formula-calculator/commits/main)
+
+---
+
+<div align="center">
+  <p>如果这个项目对您有帮助，请考虑给我们一个 ⭐ Star！</p>
+  <p>Made with ❤️ for FFXIV community</p>
+</div>
