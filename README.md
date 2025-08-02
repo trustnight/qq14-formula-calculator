@@ -45,24 +45,41 @@
 ## 项目结构
 
 ```
-ffixv-cw-calculate/
-├── src/                    # 源代码目录
-│   ├── core/              # 核心业务逻辑
-│   │   ├── calculator.py  # 配方计算引擎
-│   │   ├── database.py    # 数据库管理
+qq14-formula-calculator/
+├── main.py               # 程序入口文件
+├── main.spec             # PyInstaller打包配置
+├── requirements.txt      # Python依赖包列表
+├── ffixv_recipes.db     # SQLite数据库文件
+├── src/                  # 源代码目录
+│   ├── config.py         # 全局配置常量
+│   ├── core/             # 核心业务逻辑
+│   │   ├── calculator.py # 配方计算引擎
+│   │   ├── database.py   # 数据库管理
 │   │   ├── csv_importer.py # CSV导入导出
 │   │   └── data_migrator.py # 数据迁移工具
-│   ├── gui/               # 图形用户界面
-│   │   ├── __init__.py
-│   │   └── main_window.py # 主窗口界面
-│   ├── database/          # 数据库文件目录
-│   └── main.py           # 程序入口
-├── icon/                  # 图标资源
-├── requirements.txt       # 项目依赖
+│   └── gui/              # 图形用户界面
+│       ├── __init__.py
+│       └── main_window.py # 主窗口界面
+├── icon/                 # 图标资源目录
+│   ├── logo.png          # 应用图标
+│   ├── base/             # 基础材料图标
+│   ├── material/         # 半成品材料图标
+│   └── product/          # 成品图标
+├── .github/              # GitHub Actions工作流
+│   └── workflows/
+│       └── release.yml   # 自动发布配置
 └── README.md             # 项目说明文档
 ```
 
 ## 详细代码结构
+
+### 配置模块 (src/config.py)
+
+**全局配置常量**
+- `ICON_SIZE`: 物品图标显示尺寸 (80px)
+- `GRID_SIZE`: 物品格子尺寸 (128px)
+- `ICON_SPACING`: 物品格子间距 (5px)
+- `TABLE_ROW_HEIGHT`: 表格行高 (28px)
 
 ### 核心模块 (src/core/)
 
@@ -242,9 +259,12 @@ ffixv-cw-calculate/
 **全局函数**:
 - `main()`: 应用程序入口函数，创建QApplication和主窗口
 
-### 程序入口 (src/main.py)
+### 程序入口 (main.py)
 
-简单的程序启动脚本，导入并调用GUI模块的main函数。
+主程序入口文件，负责：
+- 资源文件路径处理（兼容PyInstaller打包环境）
+- 数据库文件释放（在打包环境下）
+- 调用GUI模块的main函数启动应用程序
 
 ## 安装和运行
 
@@ -265,23 +285,8 @@ ffixv-cw-calculate/
    ```
 3. 运行程序：
    ```bash
-   cd src
    python main.py
    ```
-
-### CSV数据格式
-
-#### 原材料CSV格式
-```csv
-name,description
-示例原材料,这是一个示例描述
-```
-
-#### 半成品/成品CSV格式
-```csv
-name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,ingredient_type_2,ingredient_name_2,quantity_2
-示例半成品,1,这是一个示例半成品,base,示例原材料1,2,base,示例原材料2,1
-```
 
 ## 技术特点
 
@@ -291,6 +296,8 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 4. **完整的数据管理**: 支持增删改查、导入导出、数据迁移等完整功能
 5. **递归计算算法**: 智能处理多层级配方依赖关系
 6. **用户友好**: 直观的界面设计和完善的错误处理
+7. **一键打包**: 使用main.spec配置文件，支持PyInstaller一键打包为exe
+8. **自动发布**: 集成GitHub Actions，支持自动构建和发布
 
 ## 开发说明
 
@@ -311,13 +318,6 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 
 如果您觉得这个项目有用，请给我们一个 ⭐ Star！
 
-[![GitHub stars](https://img.shields.io/github/stars/trustnight/qq14-formula-calculator?style=social)](https://github.com/trustnight/qq14-formula-calculator)
-[![GitHub forks](https://img.shields.io/github/forks/trustnight/qq14-formula-calculator?style=social)](https://github.com/trustnight/qq14-formula-calculator)
-[![GitHub issues](https://img.shields.io/github/issues/trustnight/qq14-formula-calculator)](https://github.com/trustnight/qq14-formula-calculator/issues)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/trustnight/qq14-formula-calculator)](https://github.com/trustnight/qq14-formula-calculator/pulls)
-
-### 📈 项目活跃度统计
-
 #### 📊 实时统计
 
 | 指标 | 状态 | 趋势 |
@@ -326,3 +326,25 @@ name,output_quantity,description,ingredient_type_1,ingredient_name_1,quantity_1,
 | 🔀 Forks | ![GitHub forks](https://img.shields.io/github/forks/trustnight/qq14-formula-calculator) | 📈 持续增长 |
 | 👥 订阅者 | ![GitHub watchers](https://img.shields.io/github/watchers/trustnight/qq14-formula-calculator) | 📈 持续增长 |
 | 🚀 下载量 | ![GitHub release downloads](https://img.shields.io/github/downloads/trustnight/qq14-formula-calculator/latest/total) | 📈 持续增长 |
+
+
+#### 📊 项目活跃度
+
+![GitHub活跃度](https://img.shields.io/github/commit-activity/m/trustnight/qq14-formula-calculator?style=for-the-badge&color=blue)
+
+![GitHub最后提交](https://img.shields.io/github/last-commit/trustnight/qq14-formula-calculator?style=for-the-badge&color=green)
+
+
+#### 📊 GitHub统计图表
+
+![GitHub统计](https://github-readme-stats.vercel.app/api?username=trustnight&show_icons=true&theme=radical&hide_border=true&include_all_commits=true&count_private=true)
+
+![GitHub语言统计](https://github-readme-stats.vercel.app/api/top-langs/?username=trustnight&layout=compact&theme=radical&hide_border=true)
+
+#### 📈 项目趋势
+
+![GitHub趋势](https://github-readme-streak-stats.herokuapp.com/?user=trustnight&theme=radical&hide_border=true)
+
+#### 🏆 贡献统计
+
+![GitHub贡献](https://github-readme-activity-graph.vercel.app/graph?username=trustnight&theme=radical&hide_border=true&area=true)
