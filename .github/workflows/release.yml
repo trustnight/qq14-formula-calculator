@@ -130,7 +130,6 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          build/FFXIV配方计算器.exe
           build/qq14-formula-calculator.exe
           README.md
           requirements.txt
@@ -138,11 +137,10 @@ jobs:
           ## 🎉 新版本发布 - ${{ github.ref_name }}
           
           ### 📦 下载
-          - **Windows (中文名)**: [FFXIV配方计算器.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/FFXIV配方计算器.exe)
-          - **Windows (英文名)**: [qq14-formula-calculator.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/qq14-formula-calculator.exe)
+          - **Windows**: [qq14-formula-calculator.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/qq14-formula-calculator.exe)
           
           ### 🔧 安装说明
-          1. 下载任意一个 `.exe` 文件
+          1. 下载 `qq14-formula-calculator.exe` 文件
           2. 双击运行即可使用
           3. 无需安装Python环境
           4. 包含完整的图标和数据库文件
@@ -159,7 +157,7 @@ jobs:
           
           ### 🆕 更新内容
           请查看提交记录了解详细更新内容：
-          https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 HEAD^)...${{ github.ref_name }}
+          https://github.com/${{ github.repository }}/compare/v0.0.3...${{ github.ref_name }}
           
           ### 📊 构建信息
           - 构建时间: ${{ github.event.head_commit.timestamp }}
@@ -221,16 +219,14 @@ jobs:
         } else {
           Write-Host "标签数量不超过2个，无需清理"
         }
-      shell: pwsh
-      
+            shell: pwsh
+        
     - name: 上传构建产物
       uses: actions/upload-artifact@v4
       with:
         name: FFXIV配方计算器-${{ github.ref_name }}
         path: |
-          build/FFXIV配方计算器.exe
           build/qq14-formula-calculator.exe
-          dist/qq14-formula-calculator.exe
           README.md
           requirements.txt
         retention-days: 30 
