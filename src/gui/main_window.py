@@ -500,11 +500,6 @@ class MaterialAddDialog(QDialog):
         self.add_base_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
         self.add_base_material_btn.clicked.connect(self.on_add_base_material_in_dialog)
         left_layout.addWidget(self.add_base_material_btn)
-        # 添加半成品按钮
-        self.add_material_btn = QPushButton("添加半成品")
-        self.add_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
-        self.add_material_btn.clicked.connect(self.on_add_material_in_dialog)
-        left_layout.addWidget(self.add_material_btn)
         self.option_list = QListWidget()
         self.option_list.setSelectionMode(QListWidget.ExtendedSelection)
         left_layout.addWidget(self.option_list)
@@ -835,7 +830,7 @@ class RecipeEditDialog(QDialog):
                 list_item = QListWidgetItem(show_text)
                 if icon_path:
                     list_item.setIcon(QIcon(icon_path))
-                    self.requirements_list.addItem(list_item)
+                self.requirements_list.addItem(list_item)
     def remove_selected_requirement(self):
         for item in self.requirements_list.selectedItems():
             self.requirements_list.takeItem(self.requirements_list.row(item))
