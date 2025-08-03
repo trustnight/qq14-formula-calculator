@@ -721,10 +721,12 @@ class RecipeEditDialog(QDialog):
         self.add_base_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
         self.add_base_material_btn.clicked.connect(self.on_add_base_material_in_dialog)
         mid_layout.addWidget(self.add_base_material_btn)
-        self.add_material_btn = QPushButton("添加半成品")
-        self.add_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
-        self.add_material_btn.clicked.connect(self.on_add_material_in_dialog)
-        mid_layout.addWidget(self.add_material_btn)
+        # 只有在非"添加半成品"模式下才显示"添加半成品"按钮，避免递归
+        if self.windowTitle() != "添加半成品":
+            self.add_material_btn = QPushButton("添加半成品")
+            self.add_material_btn.setIcon(QIcon.fromTheme("list-add") or QIcon(":/icons/plus.png"))
+            self.add_material_btn.clicked.connect(self.on_add_material_in_dialog)
+            mid_layout.addWidget(self.add_material_btn)
         mid_layout.addStretch(2)
         self.add_btn = QPushButton("→ 添加")
         self.add_btn.clicked.connect(self.add_selected_option)
