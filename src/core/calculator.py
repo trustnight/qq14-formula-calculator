@@ -282,3 +282,56 @@ class BOMCalculator:
             return self.db_manager.get_product_by_id(item_id)
         else:
             return None
+
+    def calculate_item_cost(self, item_type: str, item_id: int, quantity: float = 1) -> Dict[str, Any]:
+        """
+        计算单个物品的制作成本
+        :param item_type: 'product' 或 'material'
+        :param item_id: 物品ID
+        :param quantity: 制作数量
+        :return: 包含成本信息的字典
+        """
+        # 获取物品信息
+        if item_type == 'product':
+            item_info = self.db_manager.get_product_by_id(item_id)
+        elif item_type == 'material':
+            item_info = self.db_manager.get_material_by_id(item_id)
+        else:
+            raise ValueError(f"不支持的物品类型: {item_type}")
+        
+        if not item_info:
+            return {
+                'name': f'未知物品({item_id})',
+                'quantity': quantity,
+                'unit_cost': 0,
+                'total_cost': 0,
+                'market_price': 0,
+                'profit': 0,
+                'profit_rate': 0
+            }
+        
+        # 计算制作成本
+        requirements = self.calculate_requirements_by_id(item_type, item_id, quantity)
+        formatted_result = self.format_requirements_for_display(requirements)
+        total_cost = formatted_result['total_cost']
+        
+        # 获取市场价
+        market_price = item_info.get('price', 0) * quantity
+        
+        # 计算利润
+        profit = market_price - total_cost
+        profit_rate = (profit / total_cost * 100) if total_cost > 0 else 0
+        
+        # 计算单位成本
+        unit_cost = total_cost / quantity if quantity > 0 else 0
+        
+        return {
+            'name': item_info['name'],
+            'quantity': quantity,
+            'unit_cost': unit_cost,
+            'total_cost': total_cost,
+            'market_price': market_price,
+            'profit': profit,
+            'profit_rate': profit_rate,
+            'output_quantity': item_info.get('output_quantity', 1)
+        }

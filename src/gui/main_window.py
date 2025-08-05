@@ -292,6 +292,209 @@ class ImportWorker(QThread):
         except Exception as e:
             self.error.emit(str(e))
 
+class ExportWorker(QThread):
+    """导出工作线程，防止界面卡死"""
+    finished = Signal(dict)
+    error = Signal(str)
+    progress = Signal(str)
+    
+    def __init__(self, db_manager, calculator, file_path: str):
+        super().__init__()
+        self.db_manager = db_manager
+        self.calculator = calculator
+        self.file_path = file_path
+        self._is_cancelled = False
+    
+    def cancel(self):
+        """取消导出操作"""
+        self._is_cancelled = True
+    
+    def run(self):
+        try:
+            # 获取所有成品和半成品
+            products = self.db_manager.get_products()
+            materials = self.db_manager.get_materials()
+            
+            if not products and not materials:
+                self.error.emit("没有找到任何成品或半成品数据")
+                return
+            
+            # 准备CSV数据
+            csv_data = []
+            csv_data.append([
+                "物品名称", "物品类型", "产出数量", "市场单价", 
+                "单件成本", "税后售价", "单件利润", "利润率(%)", "总利润", "状态"
+            ])
+            
+            processed_count = 0
+            total_items = len(products) + len(materials)
+            
+            # 处理成品
+            for product in products:
+                if self._is_cancelled:
+                    self.error.emit("导出已取消")
+                    return
+                
+                try:
+                    self.progress.emit(f"正在处理成品: {product['name']} ({processed_count + 1}/{total_items})")
+                    
+                    # 计算成本
+                    cost_info = self.calculator.calculate_item_cost(
+                        'product', 
+                        product['id'], 
+                        product.get('output_quantity', 1)
+                    )
+                    
+                    # 获取交易税率
+                    tax_rate = self.db_manager.get_tax_rate()
+                    
+                    # 计算税后售价和利润
+                    market_price = product.get('price', 0)
+                    unit_cost = cost_info['unit_cost']
+                    after_tax_price = market_price * (1 - tax_rate / 100)
+                    unit_profit = after_tax_price - unit_cost
+                    profit_rate = (unit_profit / unit_cost * 100) if unit_cost > 0 else 0
+                    total_profit = unit_profit * product.get('output_quantity', 1)
+                    
+                    # 确定状态
+                    if market_price == 0:
+                        status = "未设置价格"
+                    elif unit_profit > 0:
+                        status = "盈利"
+                    elif unit_profit == 0:
+                        status = "保本"
+                    else:
+                        status = "亏损"
+                    
+                    csv_data.append([
+                        product['name'],
+                        '成品',
+                        int(product.get('output_quantity', 1)),
+                        int(market_price),
+                        int(unit_cost),
+                        int(after_tax_price),
+                        int(unit_profit),
+                        f"{profit_rate:.1f}",
+                        int(total_profit),
+                        status
+                    ])
+                    
+                    processed_count += 1
+                    
+                except Exception as e:
+                    # 如果某个产品计算失败，记录错误但继续处理其他产品
+                    self.progress.emit(f"处理失败: {product['name']} - {str(e)}")
+                    csv_data.append([
+                        product['name'],
+                        '成品',
+                        int(product.get('output_quantity', 1)),
+                        int(product.get('price', 0)),
+                        '计算失败',
+                        '计算失败',
+                        '计算失败',
+                        '计算失败',
+                        '计算失败',
+                        '计算失败'
+                    ])
+                    processed_count += 1
+                    continue
+            
+            # 处理半成品
+            for material in materials:
+                if self._is_cancelled:
+                    self.error.emit("导出已取消")
+                    return
+                
+                try:
+                    self.progress.emit(f"正在处理半成品: {material['name']} ({processed_count + 1}/{total_items})")
+                    
+                    # 计算成本
+                    cost_info = self.calculator.calculate_item_cost(
+                        'material', 
+                        material['id'], 
+                        material.get('output_quantity', 1)
+                    )
+                    
+                    # 获取交易税率
+                    tax_rate = self.db_manager.get_tax_rate()
+                    
+                    # 计算税后售价和利润
+                    market_price = material.get('price', 0)
+                    unit_cost = cost_info['unit_cost']
+                    after_tax_price = market_price * (1 - tax_rate / 100)
+                    unit_profit = after_tax_price - unit_cost
+                    profit_rate = (unit_profit / unit_cost * 100) if unit_cost > 0 else 0
+                    total_profit = unit_profit * material.get('output_quantity', 1)
+                    
+                    # 确定状态
+                    if market_price == 0:
+                        status = "未设置价格"
+                    elif unit_profit > 0:
+                        status = "盈利"
+                    elif unit_profit == 0:
+                        status = "保本"
+                    else:
+                        status = "亏损"
+                    
+                    csv_data.append([
+                        material['name'],
+                        '半成品',
+                        int(material.get('output_quantity', 1)),
+                        int(market_price),
+                        int(unit_cost),
+                        int(after_tax_price),
+                        int(unit_profit),
+                        f"{profit_rate:.1f}",
+                        int(total_profit),
+                        status
+                    ])
+                    
+                    processed_count += 1
+                    
+                except Exception as e:
+                    # 如果某个半成品计算失败，记录错误但继续处理其他物品
+                    self.progress.emit(f"处理失败: {material['name']} - {str(e)}")
+                    csv_data.append([
+                        material['name'],
+                        '半成品',
+                        int(material.get('output_quantity', 1)),
+                        int(material.get('price', 0)),
+                        '计算失败',
+                        '计算失败',
+                        '计算失败',
+                        '计算失败',
+                        '计算失败',
+                        '计算失败'
+                    ])
+                    processed_count += 1
+                    continue
+            
+            # 写入CSV文件
+            self.progress.emit("正在写入文件...")
+            import csv
+            with open(self.file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerows(csv_data)
+            
+            # 生成统计信息
+            profitable_items = sum(1 for row in csv_data[1:] if row[-1] == "盈利")
+            loss_items = sum(1 for row in csv_data[1:] if row[-1] == "亏损")
+            no_price_items = sum(1 for row in csv_data[1:] if row[-1] == "未设置价格")
+            
+            result = {
+                'success': True,
+                'processed_count': processed_count,
+                'profitable_items': profitable_items,
+                'loss_items': loss_items,
+                'no_price_items': no_price_items,
+                'file_path': self.file_path
+            }
+            
+            self.finished.emit(result)
+            
+        except Exception as e:
+            self.error.emit(f"导出失败: {str(e)}")
+
 
 class CreateMissingItemDialog(QDialog):
     """创建缺失物品对话框"""
@@ -1463,9 +1666,9 @@ class FFXIVCalculatorWindow(QMainWindow):
         self.profit_info_label = QLabel("💰 成本价和利润信息将在这里显示")
         self.profit_info_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #FF4500; margin: 10px; padding: 15px; background-color: #FFFACD; border: 3px solid #FF6347; border-radius: 8px; min-height: 30px;")
         self.profit_info_label.setAlignment(Qt.AlignCenter)
-        self.profit_info_label.setVisible(True)  # 初始显示，便于调试
+        self.profit_info_label.setVisible(False)  # 初始隐藏，只有在有数据时才显示
         layout.addWidget(self.profit_info_label)
-        debug_log("[create_calculation_result_widget] 创建了利润信息标签，初始可见")
+        debug_log("[create_calculation_result_widget] 创建了利润信息标签，初始隐藏")
         
         # 结果表格
         if FLUENT_AVAILABLE:
@@ -1598,6 +1801,15 @@ class FFXIVCalculatorWindow(QMainWindow):
         self.reverse_lookup_btn.setFixedWidth(100)
         layout.addWidget(self.reverse_lookup_btn)
         
+        # 利润分析按钮
+        if FLUENT_AVAILABLE:
+            self.profit_analysis_btn = PushButton("利润分析")
+        else:
+            self.profit_analysis_btn = QPushButton("利润分析")
+        self.profit_analysis_btn.clicked.connect(self.export_enhanced_cost_analysis)
+        self.profit_analysis_btn.setFixedWidth(80)
+        layout.addWidget(self.profit_analysis_btn)
+        
         layout.addStretch()
         return widget
     
@@ -1700,8 +1912,19 @@ class FFXIVCalculatorWindow(QMainWindow):
             self.recipe_detail_tree = TreeWidget()
         else:
             self.recipe_detail_tree = QTreeWidget()
+        
+        # 设置列标题
+        self.recipe_detail_tree.setHeaderLabels(["物品名称", "数量", "类型"])
+        self.recipe_detail_tree.setColumnWidth(0, 250)  # 物品名称列宽
+        self.recipe_detail_tree.setColumnWidth(1, 100)  # 数量列宽
+        # TreeWidget 没有 horizontalHeader 方法，需要检查类型
+        if hasattr(self.recipe_detail_tree, 'horizontalHeader'):
+            self.recipe_detail_tree.horizontalHeader().setStretchLastSection(True)  # 让最后一列自动拉伸
+        
         self.recipe_detail_tree.setRootIsDecorated(True)
         self.recipe_detail_tree.setIndentation(20)
+        self.recipe_detail_tree.setAlternatingRowColors(True)  # 交替行颜色
+        
         # 增强层级竖线
         self.recipe_detail_tree.setStyleSheet("""
 QTreeView::branch { background: transparent; border-left: 3px solid #444; }
@@ -2313,14 +2536,35 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
         result_dialog.exec()
     
     def create_tree_item_for_dialog(self, data: Dict[str, Any]) -> QTreeWidgetItem:
-        item = QTreeWidgetItem(["", str(data.get('quantity', '')), data.get('type', '')])
-        icon_item = get_item_icon_item(data.get('name', ''))
-        # 这里假设 self.recipe_detail_tree 存在
-        if hasattr(self, 'recipe_detail_tree'):
-            self.recipe_detail_tree.setItemWidget(item, 0, icon_item)
+        item_name = data.get('name', f"ID: {data.get('id', 'unknown')}")
+        item_type = data.get('type', '')
+        quantity = data.get('quantity', 0)
+        
+        item_type_map = {
+            'base': '原材料',
+            'material': '半成品', 
+            'product': '成品'
+        }
+        type_text = item_type_map.get(item_type, item_type)
+        
+        # 创建树形项目，包含名称、数量、类型三列
+        tree_item = QTreeWidgetItem([item_name, str(self.format_number(quantity)), type_text])
+        
+        # 设置图标
+        icon_item = get_item_icon_item(item_name, item_type=item_type, icon_size=24)
+        if icon_item.icon().isNull() is False:
+            tree_item.setIcon(0, icon_item.icon())
+        
+        # 设置数量列和类型列居中对齐
+        tree_item.setTextAlignment(1, Qt.AlignCenter)  # 数量列居中
+        tree_item.setTextAlignment(2, Qt.AlignCenter)  # 类型列居中
+        
+        # 递归添加子项目
         for child in data.get('children', []):
-            item.addChild(self.create_tree_item_for_dialog(child))
-        return item
+            child_item = self.create_tree_item_for_dialog(child)
+            tree_item.addChild(child_item)
+        
+        return tree_item
     
     def format_recipe_tree(self, data: Dict[str, Any], indent: int = 0) -> str:
         """格式化配方树为文本"""
@@ -2499,7 +2743,7 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
                     content=message,
                     orient=Qt.Horizontal,
                     isClosable=True,
-                    position=InfoBarPosition.TOP,
+                    position=InfoBarPosition.BOTTOM,
                     duration=3000,
                     parent=self
                 )
@@ -2509,7 +2753,7 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
                     content=message,
                     orient=Qt.Horizontal,
                     isClosable=True,
-                    position=InfoBarPosition.TOP,
+                    position=InfoBarPosition.BOTTOM,
                     duration=3000,
                     parent=self
                 )
@@ -2519,7 +2763,7 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
                     content=message,
                     orient=Qt.Horizontal,
                     isClosable=True,
-                    position=InfoBarPosition.TOP,
+                    position=InfoBarPosition.BOTTOM,
                     duration=5000,
                     parent=self
                 )
@@ -2529,7 +2773,7 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
                     content=message,
                     orient=Qt.Horizontal,
                     isClosable=True,
-                    position=InfoBarPosition.TOP,
+                    position=InfoBarPosition.BOTTOM,
                     duration=3000,
                     parent=self
                 )
@@ -2560,6 +2804,80 @@ QTreeView::branch { background: transparent; border-left: 3px solid #444; }
             dialog.exec()
         except Exception as e:
             self.show_message(f"打开配方反查对话框失败: {str(e)}", "error")
+    
+
+    
+    def export_enhanced_cost_analysis(self):
+        """导出增强版成本分析（包含成品和半成品）"""
+        try:
+            # 选择保存文件路径
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, 
+                "导出利润分析", 
+                "利润分析报告.csv", 
+                "CSV文件 (*.csv)"
+            )
+            
+            if not file_path:
+                return
+            
+            # 创建进度对话框
+            self.progress_dialog = QMessageBox(self)
+            self.progress_dialog.setWindowTitle("导出中")
+            self.progress_dialog.setText("正在准备导出...")
+            self.progress_dialog.setStandardButtons(QMessageBox.Cancel)
+            self.progress_dialog.buttonClicked.connect(self.on_export_cancelled)
+            self.progress_dialog.show()
+            
+            # 创建导出工作线程
+            self.export_worker = ExportWorker(self.db_manager, self.calculator, file_path)
+            self.export_worker.progress.connect(self.on_export_progress)
+            self.export_worker.finished.connect(self.on_export_finished)
+            self.export_worker.error.connect(self.on_export_error)
+            
+            # 启动导出线程
+            self.export_worker.start()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "导出失败", f"启动导出失败: {str(e)}")
+    
+    def on_export_cancelled(self, button):
+        """取消导出"""
+        if hasattr(self, 'export_worker') and self.export_worker.isRunning():
+            self.export_worker.cancel()
+            self.progress_dialog.setText("正在取消导出...")
+    
+    def on_export_progress(self, message):
+        """导出进度更新"""
+        if hasattr(self, 'progress_dialog'):
+            self.progress_dialog.setText(message)
+    
+    def on_export_finished(self, result):
+        """导出完成"""
+        if hasattr(self, 'progress_dialog'):
+            self.progress_dialog.close()
+        
+        if result['success']:
+            stats_message = f"""导出成功！
+
+统计信息：
+- 总物品数: {result['processed_count']}
+- 盈利物品: {result['profitable_items']}
+- 亏损物品: {result['loss_items']}
+- 未设置价格: {result['no_price_items']}
+
+文件保存位置: {result['file_path']}"""
+            
+            QMessageBox.information(self, "导出成功", stats_message)
+        else:
+            QMessageBox.critical(self, "导出失败", "导出过程中发生错误")
+    
+    def on_export_error(self, error_message):
+        """导出错误"""
+        if hasattr(self, 'progress_dialog'):
+            self.progress_dialog.close()
+        
+        QMessageBox.critical(self, "导出失败", error_message)
     
     def calculate_profit(self, total_cost):
         """计算单件利润"""
@@ -3732,6 +4050,7 @@ class MarketPriceDialog(QDialog):
         self.setMinimumSize(800, 600)
         self.resize(900, 700)
         self.tax_rate = self.db_manager.get_tax_rate()  # 从数据库加载税率
+        self.user_edits = {}  # 存储用户编辑的价格
         self.init_ui()
         self.load_data()
     
@@ -3790,15 +4109,20 @@ class MarketPriceDialog(QDialog):
         self.items_table.setColumnWidth(1, 150)
         self.items_table.setColumnWidth(2, 120)
         self.items_table.setColumnWidth(3, 120)
+        # 连接单元格编辑完成信号
+        self.items_table.itemChanged.connect(self.on_price_edited)
         layout.addWidget(self.items_table)
         
         # 按钮
         button_layout = QHBoxLayout()
+        self.apply_btn = QPushButton("应用")
+        self.apply_btn.clicked.connect(self.apply_prices)
         self.save_btn = QPushButton("保存")
         self.save_btn.clicked.connect(self.save_prices)
         self.cancel_btn = QPushButton("取消")
         self.cancel_btn.clicked.connect(self.reject)
         button_layout.addStretch()
+        button_layout.addWidget(self.apply_btn)
         button_layout.addWidget(self.save_btn)
         button_layout.addWidget(self.cancel_btn)
         layout.addLayout(button_layout)
@@ -3808,6 +4132,22 @@ class MarketPriceDialog(QDialog):
         self.tax_rate = float(value)
         # 保存到数据库
         self.db_manager.set_tax_rate(self.tax_rate)
+    
+    def on_price_edited(self, item):
+        """价格编辑事件"""
+        if item.column() == 3:  # 新售价列
+            try:
+                new_price = float(item.text())
+                # 获取物品ID作为键
+                icon_item = self.items_table.item(item.row(), 0)
+                if icon_item:
+                    item_data = icon_item.data(Qt.UserRole)
+                    if item_data:
+                        item_id = item_data['id']
+                        self.user_edits[item_id] = new_price
+            except ValueError:
+                # 如果输入的不是有效数字，恢复原值
+                item.setText(f"{item_data.get('price', 0.0):.2f}")
     
     def load_data(self):
         """加载数据"""
@@ -3857,6 +4197,9 @@ class MarketPriceDialog(QDialog):
     
     def display_items(self, items):
         """显示物品列表"""
+        # 暂时断开信号连接，避免触发编辑事件
+        self.items_table.itemChanged.disconnect(self.on_price_edited)
+        
         self.items_table.setRowCount(len(items))
         
         for row, item in enumerate(items):
@@ -3877,10 +4220,19 @@ class MarketPriceDialog(QDialog):
             current_price_item.setTextAlignment(Qt.AlignCenter)
             self.items_table.setItem(row, 2, current_price_item)
             
-            # 新售价（可编辑）
-            new_price_item = QTableWidgetItem(f"{item['price']:.2f}")
+            # 新售价（可编辑）- 优先使用用户编辑的值
+            item_id = item['id']
+            if item_id in self.user_edits:
+                display_price = self.user_edits[item_id]
+            else:
+                display_price = item['price']
+            
+            new_price_item = QTableWidgetItem(f"{display_price:.2f}")
             new_price_item.setTextAlignment(Qt.AlignCenter)
             self.items_table.setItem(row, 3, new_price_item)
+        
+        # 重新连接信号
+        self.items_table.itemChanged.connect(self.on_price_edited)
     
     def filter_items(self):
         """过滤物品"""
@@ -3911,8 +4263,8 @@ class MarketPriceDialog(QDialog):
         
         self.display_items(filtered_items)
     
-    def save_prices(self):
-        """保存售价"""
+    def apply_prices(self):
+        """应用价格更改（保存但不关闭对话框）"""
         try:
             updated_count = 0
             for row in range(self.items_table.rowCount()):
@@ -3963,7 +4315,67 @@ class MarketPriceDialog(QDialog):
                     except ValueError:
                         continue
             
-            QMessageBox.information(self, "成功", f"已更新 {updated_count} 个物品的售价")
+            # 清空用户编辑记录
+            self.user_edits.clear()
+            
+            # 重新加载数据以更新当前售价列
+            self.load_data()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"应用售价失败: {str(e)}")
+    
+    def save_prices(self):
+        """保存售价并关闭对话框"""
+        try:
+            updated_count = 0
+            for row in range(self.items_table.rowCount()):
+                icon_item = self.items_table.item(row, 0)
+                new_price_item = self.items_table.item(row, 3)
+                
+                if icon_item and new_price_item:
+                    item_data = icon_item.data(Qt.UserRole)
+                    item_id = item_data['id']
+                    item_type = item_data['item_type']
+                    
+                    try:
+                        new_price = float(new_price_item.text())
+                        # 更新数据库中的售价
+                        if item_type == 'base_material':
+                            # 获取原材料信息
+                            base_material = self.db_manager.get_base_material_by_id(item_id)
+                            if base_material:
+                                self.db_manager.update_base_material(
+                                    item_id, 
+                                    base_material['name'], 
+                                    base_material.get('description'), 
+                                    new_price  # 原材料的cost字段
+                                )
+                        elif item_type == 'material':
+                            # 获取半成品信息
+                            material = self.db_manager.get_material_by_id(item_id)
+                            if material:
+                                self.db_manager.update_material(
+                                    item_id, 
+                                    material['name'], 
+                                    material['output_quantity'], 
+                                    material.get('description'), 
+                                    new_price
+                                )
+                        elif item_type == 'product':
+                            # 获取成品信息
+                            product = self.db_manager.get_product_by_id(item_id)
+                            if product:
+                                self.db_manager.update_product(
+                                    item_id, 
+                                    product['name'], 
+                                    product['output_quantity'], 
+                                    product.get('description'), 
+                                    new_price
+                                )
+                        updated_count += 1
+                    except ValueError:
+                        continue
+            
             self.accept()
             
         except Exception as e:
